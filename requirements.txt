@@ -1,0 +1,7 @@
+# Aiorbust Renoise
+kornia
+# Aiorbust Apply LUT
+colour-science
+# Image handling (usually already present in ComfyUI)
+numpy
+Pillow
