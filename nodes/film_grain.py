@@ -1,19 +1,19 @@
 """
-FilmGrain
-=========
-Self-contained copy of the `FilmGrain` node from comfyui-post-processing-nodes
-(EllangoK), pinned to commit c49a05254795403648f2c1774b6f5ea39f96e7d5.
+Aiorbust Film Grain
+===================
+Self-contained copy of the `aiorbustfilmgrain` node from aiorbust-ofm-pack
+(post processing/Aiorbust_FilmGrain.py), itself adapted from
+comfyui-post-processing-nodes (EllangoK), commit c49a052.
 
 Adds Perlin-noise film grain, with optional colour temperature and vignette.
-The node ID is kept as "FilmGrain" so existing workflows referencing that type
-load unchanged.
+Registry ID: "aiorbustfilmgrain".
 """
 
 import numpy as np
 import torch
 
 
-class FilmGrain:
+class AiorbustFilmGrain:
     def __init__(self):
         pass
 
@@ -49,10 +49,10 @@ class FilmGrain:
             },
         }
 
+    CATEGORY = "Aiorbust/Post-Processing"
     RETURN_TYPES = ("IMAGE",)
+    RETURN_NAMES = ("image",)
     FUNCTION = "film_grain"
-
-    CATEGORY = "postprocessing/Effects"
 
     def film_grain(self, image: torch.Tensor, intensity: float, scale: float, temperature: float, vignette: float):
         batch_size, height, width, _ = image.shape
@@ -160,9 +160,9 @@ class FilmGrain:
 
 
 NODE_CLASS_MAPPINGS = {
-    "FilmGrain": FilmGrain,
+    "aiorbustfilmgrain": AiorbustFilmGrain,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "FilmGrain": "Film Grain",
+    "aiorbustfilmgrain": "🎞️ Aiorbust Film Grain",
 }

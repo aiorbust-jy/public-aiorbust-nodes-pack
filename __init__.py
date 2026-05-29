@@ -8,7 +8,7 @@ used by the public face-swap workflow:
     - Aiorbust Metadata Bypass      (MetadataBypassNode)
     - Aiorbust Renoise              (Aiorbust_Renoise)
     - Aiorbust Apply LUT            (Aiorbust_Apply_LUT)
-    - Film Grain                    (FilmGrain)
+    - Aiorbust Film Grain           (aiorbustfilmgrain)
 """
 
 from .nodes.aiorbust_image_batch_loader import (
