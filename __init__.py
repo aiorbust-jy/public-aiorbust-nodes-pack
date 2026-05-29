@@ -8,6 +8,7 @@ used by the public face-swap workflow:
     - Aiorbust Metadata Bypass      (MetadataBypassNode)
     - Aiorbust Renoise              (Aiorbust_Renoise)
     - Aiorbust Apply LUT            (Aiorbust_Apply_LUT)
+    - Film Grain                    (FilmGrain)
 """
 
 from .nodes.aiorbust_image_batch_loader import (
@@ -22,6 +23,10 @@ from .nodes.aiorbust_apply_lut import (
     NODE_CLASS_MAPPINGS as _lut_cls,
     NODE_DISPLAY_NAME_MAPPINGS as _lut_disp,
 )
+from .nodes.film_grain import (
+    NODE_CLASS_MAPPINGS as _grain_cls,
+    NODE_DISPLAY_NAME_MAPPINGS as _grain_disp,
+)
 from .nodes.metadata_bypass import MetadataBypassNode
 
 NODE_CLASS_MAPPINGS = {}
@@ -32,6 +37,7 @@ for _cls, _disp in (
     (_batch_cls, _batch_disp),
     (_renoise_cls, _renoise_disp),
     (_lut_cls, _lut_disp),
+    (_grain_cls, _grain_disp),
 ):
     NODE_CLASS_MAPPINGS.update(_cls)
     NODE_DISPLAY_NAME_MAPPINGS.update(_disp)
