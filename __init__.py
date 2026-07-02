@@ -1,14 +1,15 @@
 """
 public-aiorbust-pack
 =====================
-A minimal, self-contained subset of the Aiorbust nodes — only the four nodes
+A minimal, self-contained subset of the Aiorbust nodes — only the nodes
 used by the public face-swap workflow:
 
-    - Aiorbust Image Batch Loader   (AiorbustImageBatchLoader)
-    - Aiorbust Metadata Bypass      (MetadataBypassNode)
-    - Aiorbust Renoise              (Aiorbust_Renoise)
-    - Aiorbust Apply LUT            (Aiorbust_Apply_LUT)
-    - Aiorbust Film Grain           (aiorbustfilmgrain)
+    - Aiorbust Image Batch Loader        (AiorbustImageBatchLoader)
+    - Aiorbust Metadata Bypass           (MetadataBypassNode)
+    - Aiorbust Renoise                   (Aiorbust_Renoise)
+    - Aiorbust Apply LUT                 (Aiorbust_Apply_LUT)
+    - Aiorbust Film Grain                (aiorbustfilmgrain)
+    - Aiorbust Save Image (No Metadata)  (SaveImageWithNoMetadata)
 """
 
 from .nodes.aiorbust_image_batch_loader import (
@@ -27,6 +28,10 @@ from .nodes.film_grain import (
     NODE_CLASS_MAPPINGS as _grain_cls,
     NODE_DISPLAY_NAME_MAPPINGS as _grain_disp,
 )
+from .nodes.save_image_no_metadata import (
+    NODE_CLASS_MAPPINGS as _savenm_cls,
+    NODE_DISPLAY_NAME_MAPPINGS as _savenm_disp,
+)
 from .nodes.metadata_bypass import MetadataBypassNode
 
 NODE_CLASS_MAPPINGS = {}
@@ -38,6 +43,7 @@ for _cls, _disp in (
     (_renoise_cls, _renoise_disp),
     (_lut_cls, _lut_disp),
     (_grain_cls, _grain_disp),
+    (_savenm_cls, _savenm_disp),
 ):
     NODE_CLASS_MAPPINGS.update(_cls)
     NODE_DISPLAY_NAME_MAPPINGS.update(_disp)

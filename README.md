@@ -1,7 +1,7 @@
 # public-aiorbust-pack
 
 A minimal, self-contained subset of the Aiorbust nodes — containing **only** the
-four Aiorbust nodes used by the public face-swap workflow.
+Aiorbust nodes used by the public face-swap workflow.
 
 ## Nodes included
 
@@ -9,8 +9,10 @@ four Aiorbust nodes used by the public face-swap workflow.
 |---|---|---|---|
 | `AiorbustImageBatchLoader` | Aiorbust Image Batch Loader | Aiorbust | Sequential drag-and-drop batch loader (has JS UI + upload routes) |
 | `MetadataBypassNode` | Aiorbust Metadata Bypass | Aiorbust/Automation | Strips EXIF/XMP/ICC/C2PA metadata from images |
+| `SaveImageWithNoMetadata` | Aiorbust Save Image (No Metadata) | Aiorbust/Automation | Saves PNGs to the output folder with **no** prompt/workflow/EXIF metadata |
 | `Aiorbust_Renoise` | 🎞️ Aiorbust Renoïse | Aiorbust/Post-Processing | Adds realistic sensor noise (requires `kornia`) |
 | `Aiorbust_Apply_LUT` | 🎨 Aiorbust Apply LUT | Aiorbust/Post-Processing | Applies a `.cube` LUT (requires `colour-science`) |
+| `aiorbustfilmgrain` | Aiorbust Film Grain | Aiorbust/Post-Processing | Adds photographic film grain |
 
 ## Installation
 
@@ -43,6 +45,8 @@ public-aiorbust-pack/
     ├── __init__.py
     ├── aiorbust_image_batch_loader.py
     ├── metadata_bypass.py
+    ├── save_image_no_metadata.py
     ├── aiorbust_renoise.py
-    └── aiorbust_apply_lut.py
+    ├── aiorbust_apply_lut.py
+    └── film_grain.py
 ```
