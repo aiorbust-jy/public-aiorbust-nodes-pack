@@ -1,7 +1,7 @@
 # public-aiorbust-pack
 
-A minimal, self-contained subset of the Aiorbust nodes — containing **only** the
-four Aiorbust nodes used by the public face-swap workflow.
+A self-contained subset of the Aiorbust nodes — the Aiorbust custom nodes used
+by the public Aiorbust workflows.
 
 ## Nodes included
 
@@ -11,6 +11,24 @@ four Aiorbust nodes used by the public face-swap workflow.
 | `MetadataBypassNode` | Aiorbust Metadata Bypass | Aiorbust/Automation | Strips EXIF/XMP/ICC/C2PA metadata from images |
 | `Aiorbust_Renoise` | 🎞️ Aiorbust Renoïse | Aiorbust/Post-Processing | Adds realistic sensor noise (requires `kornia`) |
 | `Aiorbust_Apply_LUT` | 🎨 Aiorbust Apply LUT | Aiorbust/Post-Processing | Applies a `.cube` LUT (requires `colour-science`) |
+| `Aiorbust_Camera_Look` | Aiorbust Camera Look | Aiorbust/Post-Processing | Camera pipeline: sensor noise → demosaic → motion blur → JPEG (numpy + PIL only) |
+| `GrokPromptNode` | Aiorbust Grok Prompt Generator | Aiorbust/Prompt | Sends a prompt (+optional image) to the xAI Grok API (requires `requests` + an xAI API key) |
+| `SaveImageNoMetadataNode` | Aiorbust Save Image No Metadata | Aiorbust/Image | Saves PNG/JPEG with no workflow/prompt metadata embedded |
+| `AiorbustEyeBBoxDetectorProvider` | Aiorbust HD Ultralytic BBox Loader | Aiorbust/Detailer | Ultralytics BBox loader with forced `imgsz=1280` for small objects (eyes) — see note below |
+| `AiorbustDetailer` | Aiorbust Detailer | Aiorbust/Detailer | FaceDetailer clone with selectable paste-back interpolation, sharpness & color-match — see note below |
+
+### Detailer nodes — extra dependency
+
+`AiorbustEyeBBoxDetectorProvider` and `AiorbustDetailer` are patched copies of
+Impact Pack / Impact Subpack nodes. They require these custom node packs to be
+installed and enabled:
+
+- **ComfyUI-Impact-Pack**
+- **ComfyUI-Impact-Subpack**
+
+They also need `opencv-python`. The Impact modules are resolved lazily at run
+time, so if they are missing the two Detailer nodes are simply skipped at
+startup (a message is printed) and the rest of the pack still loads.
 
 ## Installation
 
@@ -21,7 +39,9 @@ four Aiorbust nodes used by the public face-swap workflow.
    ```
    (For the ComfyUI portable build, use its embedded python:
    `..\..\python_embeded\python.exe -m pip install -r requirements.txt`)
-3. Restart ComfyUI.
+3. For the Detailer nodes, also install **ComfyUI-Impact-Pack** and
+   **ComfyUI-Impact-Subpack** (e.g. via ComfyUI-Manager).
+4. Restart ComfyUI.
 
 ## LUT files
 
@@ -32,7 +52,7 @@ is included. The `Aiorbust Apply LUT` node lists every `.cube` found there.
 
 ```
 public-aiorbust-pack/
-├── __init__.py                 # registers the 4 nodes
+├── __init__.py                 # registers the nodes
 ├── requirements.txt
 ├── README.md
 ├── js/
@@ -44,5 +64,9 @@ public-aiorbust-pack/
     ├── aiorbust_image_batch_loader.py
     ├── metadata_bypass.py
     ├── aiorbust_renoise.py
-    └── aiorbust_apply_lut.py
+    ├── aiorbust_apply_lut.py
+    ├── aiorbust_camera_look.py
+    ├── grok_prompt.py
+    ├── save_image_no_metadata.py
+    └── aiorbust_eye_detailer.py
 ```

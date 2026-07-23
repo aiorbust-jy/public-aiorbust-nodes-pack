@@ -2,6 +2,10 @@
 kornia
 # Aiorbust Apply LUT
 colour-science
+# Aiorbust Grok Prompt Generator
+requests
+# Aiorbust Detailer (also requires the ComfyUI-Impact-Pack + ComfyUI-Impact-Subpack custom nodes)
+opencv-python
 # Image handling (usually already present in ComfyUI)
 numpy
 Pillow
