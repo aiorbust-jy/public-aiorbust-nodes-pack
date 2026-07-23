@@ -39,7 +39,7 @@ from .nodes.grok_prompt import (
     NODE_CLASS_MAPPINGS as _grok_cls,
     NODE_DISPLAY_NAME_MAPPINGS as _grok_disp,
 )
-from .nodes.save_image_no_metadata import (
+from .nodes.save_image_no_metadata_node import (
     NODE_CLASS_MAPPINGS as _savenometa_cls,
     NODE_DISPLAY_NAME_MAPPINGS as _savenometa_disp,
 )
