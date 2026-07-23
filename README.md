@@ -9,11 +9,13 @@ by the public Aiorbust workflows.
 |---|---|---|---|
 | `AiorbustImageBatchLoader` | Aiorbust Image Batch Loader | Aiorbust | Sequential drag-and-drop batch loader (has JS UI + upload routes) |
 | `MetadataBypassNode` | Aiorbust Metadata Bypass | Aiorbust/Automation | Strips EXIF/XMP/ICC/C2PA metadata from images |
+| `SaveImageWithNoMetadata` | Aiorbust Save Image (No Metadata) | Aiorbust/Automation | Saves PNGs to the output folder with **no** prompt/workflow/EXIF metadata |
+| `SaveImageNoMetadataNode` | Aiorbust Save Image No Metadata | Aiorbust/Image | Saves PNG/JPEG with no workflow/prompt metadata embedded |
 | `Aiorbust_Renoise` | 🎞️ Aiorbust Renoïse | Aiorbust/Post-Processing | Adds realistic sensor noise (requires `kornia`) |
 | `Aiorbust_Apply_LUT` | 🎨 Aiorbust Apply LUT | Aiorbust/Post-Processing | Applies a `.cube` LUT (requires `colour-science`) |
+| `aiorbustfilmgrain` | Aiorbust Film Grain | Aiorbust/Post-Processing | Adds photographic film grain |
 | `Aiorbust_Camera_Look` | Aiorbust Camera Look | Aiorbust/Post-Processing | Camera pipeline: sensor noise → demosaic → motion blur → JPEG (numpy + PIL only) |
 | `GrokPromptNode` | Aiorbust Grok Prompt Generator | Aiorbust/Prompt | Sends a prompt (+optional image) to the xAI Grok API (requires `requests` + an xAI API key) |
-| `SaveImageNoMetadataNode` | Aiorbust Save Image No Metadata | Aiorbust/Image | Saves PNG/JPEG with no workflow/prompt metadata embedded |
 | `AiorbustEyeBBoxDetectorProvider` | Aiorbust HD Ultralytic BBox Loader | Aiorbust/Detailer | Ultralytics BBox loader with forced `imgsz=1280` for small objects (eyes) — see note below |
 | `AiorbustDetailer` | Aiorbust Detailer | Aiorbust/Detailer | FaceDetailer clone with selectable paste-back interpolation, sharpness & color-match — see note below |
 
@@ -63,10 +65,12 @@ public-aiorbust-pack/
     ├── __init__.py
     ├── aiorbust_image_batch_loader.py
     ├── metadata_bypass.py
+    ├── save_image_no_metadata.py         # SaveImageWithNoMetadata
+    ├── save_image_no_metadata_node.py    # SaveImageNoMetadataNode
     ├── aiorbust_renoise.py
     ├── aiorbust_apply_lut.py
+    ├── film_grain.py
     ├── aiorbust_camera_look.py
     ├── grok_prompt.py
-    ├── save_image_no_metadata.py
     └── aiorbust_eye_detailer.py
 ```

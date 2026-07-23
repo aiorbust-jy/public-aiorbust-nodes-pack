@@ -1,19 +1,20 @@
 """
 public-aiorbust-pack
 =====================
-A self-contained subset of the Aiorbust nodes — the nodes used by the public
-Aiorbust workflows:
+A self-contained subset of the Aiorbust nodes — the Aiorbust custom nodes used
+by the public Aiorbust workflows:
 
-    - Aiorbust Image Batch Loader       (AiorbustImageBatchLoader)
-    - Aiorbust Metadata Bypass          (MetadataBypassNode)
-    - Aiorbust Renoise                  (Aiorbust_Renoise)
-    - Aiorbust Apply LUT                (Aiorbust_Apply_LUT)
-    - Aiorbust Camera Look              (Aiorbust_Camera_Look)
-    - Aiorbust Renoise / Camera post-processing
-    - Aiorbust Grok Prompt Generator    (GrokPromptNode)
-    - Aiorbust Save Image No Metadata   (SaveImageNoMetadataNode)
+    - Aiorbust Image Batch Loader        (AiorbustImageBatchLoader)
+    - Aiorbust Metadata Bypass           (MetadataBypassNode)
+    - Aiorbust Renoise                   (Aiorbust_Renoise)
+    - Aiorbust Apply LUT                 (Aiorbust_Apply_LUT)
+    - Aiorbust Film Grain                (aiorbustfilmgrain)
+    - Aiorbust Camera Look               (Aiorbust_Camera_Look)
+    - Aiorbust Grok Prompt Generator     (GrokPromptNode)
+    - Aiorbust Save Image (No Metadata)  (SaveImageWithNoMetadata)
+    - Aiorbust Save Image No Metadata    (SaveImageNoMetadataNode)
     - Aiorbust HD Ultralytic BBox Loader (AiorbustEyeBBoxDetectorProvider)*
-    - Aiorbust Detailer                 (AiorbustDetailer)*
+    - Aiorbust Detailer                  (AiorbustDetailer)*
 
     * The two Detailer nodes require ComfyUI-Impact-Pack and
       ComfyUI-Impact-Subpack to be installed (resolved lazily at run time).
@@ -31,6 +32,10 @@ from .nodes.aiorbust_apply_lut import (
     NODE_CLASS_MAPPINGS as _lut_cls,
     NODE_DISPLAY_NAME_MAPPINGS as _lut_disp,
 )
+from .nodes.film_grain import (
+    NODE_CLASS_MAPPINGS as _grain_cls,
+    NODE_DISPLAY_NAME_MAPPINGS as _grain_disp,
+)
 from .nodes.aiorbust_camera_look import (
     NODE_CLASS_MAPPINGS as _camera_cls,
     NODE_DISPLAY_NAME_MAPPINGS as _camera_disp,
@@ -38,6 +43,10 @@ from .nodes.aiorbust_camera_look import (
 from .nodes.grok_prompt import (
     NODE_CLASS_MAPPINGS as _grok_cls,
     NODE_DISPLAY_NAME_MAPPINGS as _grok_disp,
+)
+from .nodes.save_image_no_metadata import (
+    NODE_CLASS_MAPPINGS as _savenm_cls,
+    NODE_DISPLAY_NAME_MAPPINGS as _savenm_disp,
 )
 from .nodes.save_image_no_metadata_node import (
     NODE_CLASS_MAPPINGS as _savenometa_cls,
@@ -53,8 +62,10 @@ for _cls, _disp in (
     (_batch_cls, _batch_disp),
     (_renoise_cls, _renoise_disp),
     (_lut_cls, _lut_disp),
+    (_grain_cls, _grain_disp),
     (_camera_cls, _camera_disp),
     (_grok_cls, _grok_disp),
+    (_savenm_cls, _savenm_disp),
     (_savenometa_cls, _savenometa_disp),
 ):
     NODE_CLASS_MAPPINGS.update(_cls)
