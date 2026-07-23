@@ -13,11 +13,13 @@ by the public Aiorbust workflows:
     - Aiorbust Grok Prompt Generator     (GrokPromptNode)
     - Aiorbust Save Image (No Metadata)  (SaveImageWithNoMetadata)
     - Aiorbust Save Image No Metadata    (SaveImageNoMetadataNode)
+    - Aiorbust Speed HD Sampler          (AiorbustSpeedHDSampler)**
     - Aiorbust HD Ultralytic BBox Loader (AiorbustEyeBBoxDetectorProvider)*
     - Aiorbust Detailer                  (AiorbustDetailer)*
 
     * The two Detailer nodes require ComfyUI-Impact-Pack and
       ComfyUI-Impact-Subpack to be installed (resolved lazily at run time).
+    ** The Speed HD Sampler needs scipy (and PyWavelets only for transform=dwt).
 """
 
 from .nodes.aiorbust_image_batch_loader import (
@@ -88,6 +90,19 @@ try:
 except Exception as _e:
     print(f"[public-aiorbust-pack] Detailer nodes not loaded "
           f"(needs ComfyUI-Impact-Pack + Impact-Subpack): {_e}")
+
+# The Speed HD Sampler needs scipy (imported at module load). Load it
+# defensively so a missing scipy never takes the whole pack down.
+try:
+    from .nodes.aiorbust_speed_hd_sampler import (
+        NODE_CLASS_MAPPINGS as _speedhd_cls,
+        NODE_DISPLAY_NAME_MAPPINGS as _speedhd_disp,
+    )
+    NODE_CLASS_MAPPINGS.update(_speedhd_cls)
+    NODE_DISPLAY_NAME_MAPPINGS.update(_speedhd_disp)
+except Exception as _e:
+    print(f"[public-aiorbust-pack] Speed HD Sampler not loaded "
+          f"(needs scipy): {_e}")
 
 # JS UI assets (used by the Image Batch Loader node)
 WEB_DIRECTORY = "./js"

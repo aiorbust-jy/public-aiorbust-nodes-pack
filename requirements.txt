@@ -6,6 +6,8 @@ colour-science
 requests
 # Aiorbust Detailer (also requires the ComfyUI-Impact-Pack + ComfyUI-Impact-Subpack custom nodes)
 opencv-python
+# Aiorbust Speed HD Sampler (PyWavelets only needed for transform=dwt)
+scipy
 # Image handling (usually already present in ComfyUI)
 numpy
 Pillow

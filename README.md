@@ -16,6 +16,7 @@ by the public Aiorbust workflows.
 | `aiorbustfilmgrain` | Aiorbust Film Grain | Aiorbust/Post-Processing | Adds photographic film grain |
 | `Aiorbust_Camera_Look` | Aiorbust Camera Look | Aiorbust/Post-Processing | Camera pipeline: sensor noise → demosaic → motion blur → JPEG (numpy + PIL only) |
 | `GrokPromptNode` | Aiorbust Grok Prompt Generator | Aiorbust/Prompt | Sends a prompt (+optional image) to the xAI Grok API (requires `requests` + an xAI API key) |
+| `AiorbustSpeedHDSampler` | Aiorbust Speed HD Sampler | Aiorbust/Sampling | Spectral progressive-diffusion SAMPLER (feed into SamplerCustomAdvanced); requires `scipy`, plus `PyWavelets` only for `transform=dwt` |
 | `AiorbustEyeBBoxDetectorProvider` | Aiorbust HD Ultralytic BBox Loader | Aiorbust/Detailer | Ultralytics BBox loader with forced `imgsz=1280` for small objects (eyes) — see note below |
 | `AiorbustDetailer` | Aiorbust Detailer | Aiorbust/Detailer | FaceDetailer clone with selectable paste-back interpolation, sharpness & color-match — see note below |
 
@@ -72,5 +73,8 @@ public-aiorbust-pack/
     ├── film_grain.py
     ├── aiorbust_camera_look.py
     ├── grok_prompt.py
+    ├── aiorbust_speed_hd_sampler.py
+    ├── speed_hd_core.py               # framework-agnostic math (SPEED, MIT)
+    ├── speed_hd_spectral_utils.py     # spectral transforms (SPEED, MIT)
     └── aiorbust_eye_detailer.py
 ```
