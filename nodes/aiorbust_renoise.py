@@ -1,4 +1,5 @@
 import torch
+import torch.nn.functional as F
 import math
 
 try:
@@ -57,6 +58,10 @@ class Aiorbust_Renoise:
                     "default": "ISO 400",
                     "tooltip": "ISO noise level. ISO 0 = off | ISO 50 = barely visible | ISO 100 = clean | ISO 1600 = heavy grain | Night Mode = chroma-heavy.",
                 }),
+                "grain_size": ("FLOAT", {
+                    "default": 1.0, "min": 0.1, "max": 8.0, "step": 0.1,
+                    "tooltip": "Taille des grains de bruit (PAS l'intensite, qui vient de l'ISO preset). 1.0 = pixel par pixel (comportement d'origine). Au-dessus de 1 = grains plus gros/visibles (bruit genere a resolution reduite puis agrandi en nearest-neighbor). En dessous de 1 (jusqu'a 0.1) = grain plus fin/serre (bruit genere a resolution superieure puis moyenne vers le bas).",
+                }),
             },
         }
 
@@ -81,11 +86,29 @@ class Aiorbust_Renoise:
         return kfilters.gaussian_blur2d(tensor, (ks, ks), (sigma, sigma))
 
     # ------------------------------------------------------------------
+    def _gen_grain_noise(self, B: int, C: int, H: int, W: int, grain_size: float, device) -> torch.Tensor:
+        """Random noise at (B,C,H,W). grain_size == 1 -> per-pixel noise
+        (original behavior). grain_size > 1 -> noise generated at a reduced
+        resolution then upscaled with nearest-neighbor, producing visibly
+        bigger noise blobs. grain_size < 1 -> noise generated at a higher
+        resolution then averaged down (area), producing a finer/tighter
+        texture than plain per-pixel noise. Neither direction changes
+        intensity (see ISO preset)."""
+        if grain_size == 1.0:
+            return torch.randn(B, C, H, W, device=device)
+        rh = max(1, round(H / grain_size))
+        rw = max(1, round(W / grain_size))
+        small = torch.randn(B, C, rh, rw, device=device)
+        mode = "nearest" if grain_size > 1.0 else "area"
+        return F.interpolate(small, size=(H, W), mode=mode)
+
+    # ------------------------------------------------------------------
     def renoise(
         self,
         image:      torch.Tensor,
         seed:       int,
         iso_preset: str,
+        grain_size: float = 1.0,
     ):
         if not KORNIA_AVAILABLE:
             raise ImportError("Kornia is required. Install with: pip install kornia")
@@ -108,13 +131,13 @@ class Aiorbust_Renoise:
 
         # --- Luminance grain (same pattern on all 3 channels) ---
         if sensor_grain > 0:
-            luma_noise = torch.randn(B, 1, H, W, device=DEVICE).expand(B, 3, H, W).clone()
+            luma_noise = self._gen_grain_noise(B, 1, H, W, grain_size, DEVICE).expand(B, 3, H, W).clone()
             luma_noise = self._blur(luma_noise, grain_softness)
             noise = noise + luma_noise * sensor_grain
 
         # --- Chroma scatter (independent per channel) ---
         if color_scatter > 0:
-            chroma_noise = torch.randn(B, 3, H, W, device=DEVICE)
+            chroma_noise = self._gen_grain_noise(B, 3, H, W, grain_size, DEVICE)
             chroma_noise = self._blur(chroma_noise, color_softness)
             noise = noise + chroma_noise * color_scatter
 
