@@ -11,6 +11,7 @@ by the public Aiorbust workflows:
     - Aiorbust Film Grain                (aiorbustfilmgrain)
     - Aiorbust Camera Look               (Aiorbust_Camera_Look)
     - Aiorbust Grok Prompt Generator     (GrokPromptNode)
+    - Aiorbust Prompt Generator          (GeminiPromptNode)
     - Aiorbust Save Image (No Metadata)  (SaveImageWithNoMetadata)
     - Aiorbust Save Image No Metadata    (SaveImageNoMetadataNode)
     - Aiorbust Speed HD Sampler          (AiorbustSpeedHDSampler)**
@@ -46,6 +47,10 @@ from .nodes.grok_prompt import (
     NODE_CLASS_MAPPINGS as _grok_cls,
     NODE_DISPLAY_NAME_MAPPINGS as _grok_disp,
 )
+from .nodes.gemini_prompt import (
+    NODE_CLASS_MAPPINGS as _gemini_cls,
+    NODE_DISPLAY_NAME_MAPPINGS as _gemini_disp,
+)
 from .nodes.save_image_no_metadata import (
     NODE_CLASS_MAPPINGS as _savenm_cls,
     NODE_DISPLAY_NAME_MAPPINGS as _savenm_disp,
@@ -67,6 +72,7 @@ for _cls, _disp in (
     (_grain_cls, _grain_disp),
     (_camera_cls, _camera_disp),
     (_grok_cls, _grok_disp),
+    (_gemini_cls, _gemini_disp),
     (_savenm_cls, _savenm_disp),
     (_savenometa_cls, _savenometa_disp),
 ):
@@ -104,7 +110,7 @@ except Exception as _e:
     print(f"[public-aiorbust-pack] Speed HD Sampler not loaded "
           f"(needs scipy): {_e}")
 
-# JS UI assets (used by the Image Batch Loader node)
+# JS UI assets (Image Batch Loader + Prompt Generator)
 WEB_DIRECTORY = "./js"
 
 print(f"[public-aiorbust-pack] Loaded {len(NODE_CLASS_MAPPINGS)} nodes: "

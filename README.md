@@ -16,9 +16,28 @@ by the public Aiorbust workflows.
 | `aiorbustfilmgrain` | Aiorbust Film Grain | Aiorbust/Post-Processing | Adds photographic film grain |
 | `Aiorbust_Camera_Look` | Aiorbust Camera Look | Aiorbust/Post-Processing | Camera pipeline: sensor noise → demosaic → motion blur → JPEG (numpy + PIL only) |
 | `GrokPromptNode` | Aiorbust Grok Prompt Generator | Aiorbust/Prompt | Sends a prompt (+optional image) to the xAI Grok API (requires `requests` + an xAI API key) |
+| `GeminiPromptNode` | Aiorbust Prompt Generator | Aiorbust/Prompt | Analyzes images / writes prompts via Gemini, Vertex AI or Grok; built-in JSON-analysis, style-transfer and Seedream-edit modes (has JS UI) — see note below |
 | `AiorbustSpeedHDSampler` | Aiorbust Speed HD Sampler | Aiorbust/Sampling | Spectral progressive-diffusion SAMPLER (feed into SamplerCustomAdvanced); requires `scipy`, plus `PyWavelets` only for `transform=dwt` |
 | `AiorbustEyeBBoxDetectorProvider` | Aiorbust HD Ultralytic BBox Loader | Aiorbust/Detailer | Ultralytics BBox loader with forced `imgsz=1280` for small objects (eyes) — see note below |
 | `AiorbustDetailer` | Aiorbust Detailer | Aiorbust/Detailer | FaceDetailer clone with selectable paste-back interpolation, sharpness & color-match — see note below |
+
+### Prompt Generator — API keys & providers
+
+`GeminiPromptNode` talks to three providers, picked with the `provider` widget:
+
+- **Gemini** — needs a Google AI Studio key in `gemini_api_key`
+  ([aistudio.google.com](https://aistudio.google.com/apikey)). Only `requests`.
+- **Grok** — needs an xAI key in `grok_api_key` ([console.x.ai](https://console.x.ai)).
+  Only `requests`.
+- **Vertex** — needs `vertex_json_folder` pointed at a folder of GCP service
+  account `.json` files (one per project; successive runs rotate through them to
+  spread the per-project quota). This provider additionally needs
+  `google-genai` + `google-auth`, imported lazily — without them the node still
+  loads and the other two providers still work.
+
+The `model` dropdown lists both Gemini and Grok ids; the JS narrows what is
+shown to the selected provider, and the node re-checks the pairing at run time
+so an API-driven workflow cannot silently call the wrong vendor.
 
 ### Detailer nodes — extra dependency
 
@@ -59,7 +78,8 @@ public-aiorbust-pack/
 ├── requirements.txt
 ├── README.md
 ├── js/
-│   └── aiorbust_image_batch_loader.js
+│   ├── aiorbust_image_batch_loader.js
+│   └── ofm_prompt_generator.js
 ├── luts/
 │   └── *.cube
 └── nodes/
@@ -73,6 +93,7 @@ public-aiorbust-pack/
     ├── film_grain.py
     ├── aiorbust_camera_look.py
     ├── grok_prompt.py
+    ├── gemini_prompt.py               # GeminiPromptNode (Gemini / Vertex / Grok)
     ├── aiorbust_speed_hd_sampler.py
     ├── speed_hd_core.py               # framework-agnostic math (SPEED, MIT)
     ├── speed_hd_spectral_utils.py     # spectral transforms (SPEED, MIT)
