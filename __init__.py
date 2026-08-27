@@ -15,6 +15,12 @@ by the public Aiorbust workflows:
     - Aiorbust Save Image (No Metadata)  (SaveImageWithNoMetadata)
     - Aiorbust Save Image No Metadata    (SaveImageNoMetadataNode)
     - Aiorbust Speed HD Sampler          (AiorbustSpeedHDSampler)**
+    - Aiorbust Resolution (MP)           (AiorbustResolutionMP)
+    - Aiorbust H3 Frame Snap             (AiorbustH3FrameSnap)
+    - Aiorbust Audio Switch              (AiorbustAudioSwitch)
+    - Aiorbust Group Toggle              (AiorbustGroupToggle)
+    - Aiorbust Image Black Check         (ImageBlackCheckNode)
+    - H3 Context-IR (Gemini)             (H3ContextIR)
     - Aiorbust HD Ultralytic BBox Loader (AiorbustEyeBBoxDetectorProvider)*
     - Aiorbust Detailer                  (AiorbustDetailer)*
 
@@ -59,7 +65,28 @@ from .nodes.save_image_no_metadata_node import (
     NODE_CLASS_MAPPINGS as _savenometa_cls,
     NODE_DISPLAY_NAME_MAPPINGS as _savenometa_disp,
 )
+from .nodes.aiorbust_resolution_mp import (
+    NODE_CLASS_MAPPINGS as _resmp_cls,
+    NODE_DISPLAY_NAME_MAPPINGS as _resmp_disp,
+)
+from .nodes.aiorbust_h3_frame_snap import (
+    NODE_CLASS_MAPPINGS as _framesnap_cls,
+    NODE_DISPLAY_NAME_MAPPINGS as _framesnap_disp,
+)
+from .nodes.aiorbust_audio_switch import (
+    NODE_CLASS_MAPPINGS as _audiosw_cls,
+    NODE_DISPLAY_NAME_MAPPINGS as _audiosw_disp,
+)
+from .nodes.h3_context_ir import (
+    NODE_CLASS_MAPPINGS as _ctxir_cls,
+    NODE_DISPLAY_NAME_MAPPINGS as _ctxir_disp,
+)
+from .nodes.aiorbust_group_toggle import (
+    NODE_CLASS_MAPPINGS as _grouptoggle_cls,
+    NODE_DISPLAY_NAME_MAPPINGS as _grouptoggle_disp,
+)
 from .nodes.metadata_bypass import MetadataBypassNode
+from .nodes.image_black_check import ImageBlackCheckNode
 
 NODE_CLASS_MAPPINGS = {}
 NODE_DISPLAY_NAME_MAPPINGS = {}
@@ -75,13 +102,21 @@ for _cls, _disp in (
     (_gemini_cls, _gemini_disp),
     (_savenm_cls, _savenm_disp),
     (_savenometa_cls, _savenometa_disp),
+    (_resmp_cls, _resmp_disp),
+    (_framesnap_cls, _framesnap_disp),
+    (_audiosw_cls, _audiosw_disp),
+    (_grouptoggle_cls, _grouptoggle_disp),
+    (_ctxir_cls, _ctxir_disp),
 ):
     NODE_CLASS_MAPPINGS.update(_cls)
     NODE_DISPLAY_NAME_MAPPINGS.update(_disp)
 
-# metadata_bypass exposes only the class
+# These two modules expose only the class
 NODE_CLASS_MAPPINGS["MetadataBypassNode"] = MetadataBypassNode
 NODE_DISPLAY_NAME_MAPPINGS["MetadataBypassNode"] = "Aiorbust Metadata Bypass"
+
+NODE_CLASS_MAPPINGS["ImageBlackCheckNode"] = ImageBlackCheckNode
+NODE_DISPLAY_NAME_MAPPINGS["ImageBlackCheckNode"] = "Aiorbust Image Black Check"
 
 # The two Detailer nodes depend on Impact Pack / Impact Subpack. Load them
 # defensively so a missing dependency never takes the whole pack down — the
@@ -110,7 +145,7 @@ except Exception as _e:
     print(f"[public-aiorbust-pack] Speed HD Sampler not loaded "
           f"(needs scipy): {_e}")
 
-# JS UI assets (Image Batch Loader + Prompt Generator)
+# JS UI assets (Image Batch Loader + Prompt Generator + Group Toggle)
 WEB_DIRECTORY = "./js"
 
 print(f"[public-aiorbust-pack] Loaded {len(NODE_CLASS_MAPPINGS)} nodes: "
