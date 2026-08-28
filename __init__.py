@@ -24,12 +24,16 @@ by the public Aiorbust workflows:
     - Aiorbust Load API Keys             (LoadAPIKeysNode)
     - Aiorbust Video Frame Extractor     (VideoFrameExtractorNode)
     - Aiorbust Image and Video Edit AIO  (NanoBananaAIO)***
+    - Aiorbust License                   (AiorbustLicense)
     - Aiorbust HD Ultralytic BBox Loader (AiorbustEyeBBoxDetectorProvider)*
     - Aiorbust Detailer                  (AiorbustDetailer)*
 
     * The two Detailer nodes require ComfyUI-Impact-Pack and
       ComfyUI-Impact-Subpack to be installed (resolved lazily at run time).
     ** The Speed HD Sampler needs scipy (and PyWavelets only for transform=dwt).
+    Wire Aiorbust License into the license_key input of the licensed nodes,
+    or set AIORBUST_LICENSE_KEY and leave them alone.
+
     *** Licensed. The node here is the interface; the generation runs on the
         Aiorbust service. Needs an Aiorbust licence key and your own provider
         API keys. See nodes/nano_banana_aio.py for where the key is read from.
@@ -103,6 +107,10 @@ from .nodes.nano_banana_aio import (
     NODE_CLASS_MAPPINGS as _nbaio_cls,
     NODE_DISPLAY_NAME_MAPPINGS as _nbaio_disp,
 )
+from .nodes.aiorbust_license import (
+    NODE_CLASS_MAPPINGS as _lic_cls,
+    NODE_DISPLAY_NAME_MAPPINGS as _lic_disp,
+)
 from .nodes.metadata_bypass import MetadataBypassNode
 from .nodes.image_black_check import ImageBlackCheckNode
 
@@ -128,6 +136,7 @@ for _cls, _disp in (
     (_apikeys_cls, _apikeys_disp),
     (_vfx_cls, _vfx_disp),
     (_nbaio_cls, _nbaio_disp),
+    (_lic_cls, _lic_disp),
 ):
     NODE_CLASS_MAPPINGS.update(_cls)
     NODE_DISPLAY_NAME_MAPPINGS.update(_disp)
