@@ -5,8 +5,11 @@ proprietary: it turns tensors into bytes, forwards them, and prints what comes
 back. The grounding schema, the compilation rules and the MiniMax guides live
 on the service and are never delivered to a pod.
 
-Node identity is unchanged — same node_id, same inputs, same outputs — so
-existing workflows keep working with no edits.
+Node identity is unchanged — same node_id, same widget ORDER, same outputs — so
+existing workflows keep working with no edits. ComfyUI stores widget values
+positionally, so `guide_folder` survives as an ignored placeholder and
+`license_key` is appended last; removing or reordering a widget here silently
+feeds every later value into the wrong input.
 """
 from __future__ import annotations
 
@@ -241,6 +244,17 @@ class H3ContextIR:
                                "aspect_ratio output to keep it in sync."}),
                 "provider": (PROVIDERS, {"default": "Gemini"}),
                 "model": (MODELS, {"default": "gemini-3.6-flash"}),
+                # DEPRECATED, and kept only to hold its position. ComfyUI stores
+                # widget values POSITIONALLY in the workflow JSON, so removing a
+                # widget silently shifts every value after it onto the wrong
+                # input — a saved graph then feeds this slot's old path into
+                # max_tokens and errors with "invalid literal for int()".
+                # The guides live on the service now and this value is ignored.
+                # Do not delete it; a replacement must go on the END.
+                "guide_folder": ("STRING", {
+                    "default": "", "multiline": False,
+                    "tooltip": "No longer used — the guides live on the Aiorbust "
+                               "service. Kept so existing workflows keep loading."}),
                 "max_tokens": ("INT", {
                     "default": 8192, "min": 512, "max": 65536, "step": 512}),
             },
@@ -260,23 +274,25 @@ class H3ContextIR:
                 "images_batch": ("IMAGE",),
                 "video": ("IMAGE",),
                 "video_fps": ("FLOAT", {"default": 24.0, "min": 1.0, "max": 120.0}),
-                "video_keyframes": ("INT", {
-                    "default": VIDEO_KEYFRAMES, "min": 1, "max": 32}),
                 "media_resolution": (
                     ["default", "low", "medium", "high"], {"default": "low"}),
+                "video_keyframes": ("INT", {
+                    "default": VIDEO_KEYFRAMES, "min": 1, "max": 32}),
                 "video_audio": ("AUDIO",),
                 "ref_audio_1": ("AUDIO",),
                 "ref_audio_2": ("AUDIO",),
                 "gemini_api_key": ("STRING", {"default": "", "multiline": False}),
                 "grok_api_key": ("STRING", {"default": "", "multiline": False}),
                 "vertex_json_folder": ("STRING", {"default": "", "multiline": False}),
+                "grounding_override": ("STRING", {"default": "", "multiline": True}),
+                # LAST, deliberately. Anything added here must go after every
+                # widget the original node had, or saved workflows shift.
                 "license_key": ("STRING", {
                     "default": "", "multiline": False,
                     "tooltip": "LAST RESORT. A key typed here is saved into the "
                                "workflow JSON and travels with every copy you share. "
                                "Prefer AIORBUST_LICENSE_KEY in the pod environment, or "
                                "put the key in /workspace/aiorbust/license.key."}),
-                "grounding_override": ("STRING", {"default": "", "multiline": True}),
             },
         }
 
@@ -293,7 +309,7 @@ class H3ContextIR:
             media_resolution="low", video_audio=None,
             ref_audio_1=None, ref_audio_2=None,
             gemini_api_key="", grok_api_key="", vertex_json_folder="",
-            license_key="", grounding_override=""):
+            license_key="", grounding_override="", guide_folder=""):
 
         key = _license_key(license_key)
 
