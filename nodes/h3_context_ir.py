@@ -35,6 +35,9 @@ NODE_ID = "H3ContextIR"
 ROLE_REFERENCE = "reference"
 ROLES = [ROLE_REFERENCE, "first_frame", "last_frame"]
 PROVIDERS = ["Gemini", "Vertex", "Grok"]
+TARGET_H3 = "MiniMax H3"
+TARGET_SEEDANCE = "Seedance"
+TARGETS = [TARGET_H3, TARGET_SEEDANCE]
 MODELS = ["gemini-3.6-flash", "gemini-3.6-pro", "grok-4-vision"]
 
 VIDEO_KEYFRAMES = 8
@@ -242,6 +245,16 @@ class H3ContextIR:
                     "tooltip": "adaptive, 16:9, 9:16, 1:1, 4:3, 3:4, 21:9, 3:2, "
                                "2:3, 5:4, 4:5. Connect Aiorbust Resolution (MP)'s "
                                "aspect_ratio output to keep it in sync."}),
+                # Index 3, matching the private pack. Inserted BEFORE provider,
+                # so every widget after it shifts by one — a workflow saved with
+                # the older node will load its values one slot early until it is
+                # re-saved. That is upstream's ordering, not a choice here.
+                "target_model": (TARGETS, {
+                    "default": TARGET_H3,
+                    "tooltip": "Which grammar pass B compiles for. Seedance uses "
+                               "ByteDance's six-slot grammar and does NOT load the "
+                               "MiniMax guides — they demand an exhaustive "
+                               "description, which Seedance treats as a failure."}),
                 "provider": (PROVIDERS, {"default": "Gemini"}),
                 "model": (MODELS, {"default": "gemini-3.6-flash"}),
                 # DEPRECATED, and kept only to hold its position. ComfyUI stores
@@ -301,7 +314,7 @@ class H3ContextIR:
     FUNCTION = "run"
     CATEGORY = "Aiorbust/Prompt"
 
-    def run(self, intent, duration_seconds, aspect_ratio, provider, model,
+    def run(self, intent, duration_seconds, aspect_ratio, target_model, provider, model,
             max_tokens, image_1=None, image_1_role=ROLE_REFERENCE,
             image_2=None, image_2_role=ROLE_REFERENCE,
             image_3=None, image_4=None, image_5=None, image_6=None,
@@ -361,6 +374,7 @@ class H3ContextIR:
             "media_resolution": media_resolution,
             "intent": intent,
             "aspect_ratio": aspect_ratio,
+            "target_model": target_model,
             "duration_seconds": float(duration_seconds),
             "fps": float(video_fps),
             "images": images,
@@ -373,8 +387,8 @@ class H3ContextIR:
         }
 
         n_img = len(images) + (len(payload["video"]["frames"]) if payload["video"] else 0)
-        print("🔍 [H3 Context-IR] %s/%s | %d image(s), %d audio | media_resolution=%s"
-              % (provider, model, n_img, len(audio), media_resolution))
+        print("🔍 [H3 Context-IR] %s | %s/%s | %d image(s), %d audio | media_resolution=%s"
+              % (target_model, provider, model, n_img, len(audio), media_resolution))
 
         # Generic envelope: the service routes on node id, so every licensed
         # node speaks the same outer shape and only `payload` differs.
