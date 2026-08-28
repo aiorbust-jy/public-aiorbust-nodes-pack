@@ -21,6 +21,8 @@ by the public Aiorbust workflows:
     - Aiorbust Group Toggle              (AiorbustGroupToggle)
     - Aiorbust Image Black Check         (ImageBlackCheckNode)
     - H3 Context-IR (Gemini)             (H3ContextIR)
+    - Aiorbust Load API Keys             (LoadAPIKeysNode)
+    - Aiorbust Video Frame Extractor     (VideoFrameExtractorNode)
     - Aiorbust HD Ultralytic BBox Loader (AiorbustEyeBBoxDetectorProvider)*
     - Aiorbust Detailer                  (AiorbustDetailer)*
 
@@ -85,6 +87,14 @@ from .nodes.aiorbust_group_toggle import (
     NODE_CLASS_MAPPINGS as _grouptoggle_cls,
     NODE_DISPLAY_NAME_MAPPINGS as _grouptoggle_disp,
 )
+from .nodes.api_keys import (
+    NODE_CLASS_MAPPINGS as _apikeys_cls,
+    NODE_DISPLAY_NAME_MAPPINGS as _apikeys_disp,
+)
+from .nodes.video_frame_extractor import (
+    NODE_CLASS_MAPPINGS as _vfx_cls,
+    NODE_DISPLAY_NAME_MAPPINGS as _vfx_disp,
+)
 from .nodes.metadata_bypass import MetadataBypassNode
 from .nodes.image_black_check import ImageBlackCheckNode
 
@@ -107,6 +117,8 @@ for _cls, _disp in (
     (_audiosw_cls, _audiosw_disp),
     (_grouptoggle_cls, _grouptoggle_disp),
     (_ctxir_cls, _ctxir_disp),
+    (_apikeys_cls, _apikeys_disp),
+    (_vfx_cls, _vfx_disp),
 ):
     NODE_CLASS_MAPPINGS.update(_cls)
     NODE_DISPLAY_NAME_MAPPINGS.update(_disp)
