@@ -26,11 +26,20 @@ from PIL import Image
 # The live service. Not a secret — it is a public HTTPS endpoint, and every
 # request to it is licence-checked. Overridable so you can point a pod at a
 # staging deployment without shipping a different client.
-DEFAULT_API_URL = "https://aiorbust-h3-ir-server.vercel.app"
+DEFAULT_API_URL = "https://aiorbust-h3-ir.onrender.com"
 API_URL = os.environ.get("AIORBUST_API_URL", "").strip() or DEFAULT_API_URL
 TIMEOUT = 600
 CLIENT_VERSION = "0.2.0"
 NODE_ID = "H3ContextIR"
+
+# Named intents the service holds. Only the LABELS ship here; the prompt
+# each one stands for lives in app/intents.py and never reaches a pod.
+INTENT_CUSTOM = 'Custom (use the intent box)'
+INTENT_PRESETS = [
+    'Custom (use the intent box)',
+    'Motion Control - corrected first frame',
+    'Motion Control - identity from picture',
+]
 
 ROLE_REFERENCE = "reference"
 ROLES = [ROLE_REFERENCE, "first_frame", "last_frame"]
@@ -48,11 +57,82 @@ AUDIO_SR = 16000    # mono 16-bit at 16 kHz: speech-grade, small enough inline
 # Tensor -> bytes. This must stay client-side; torch tensors only exist here.
 # ---------------------------------------------------------------------------
 
-def _tensor_to_png_b64(frame) -> str:
+# How much encoded media one request may carry, before base64. The service
+# rejects anything much past 4.5 MB, and the JSON around the images needs room
+# too -- the intent, the grounding, the role labels.
+MEDIA_BUDGET_BYTES = 3_200_000
+
+# Tried in order until the whole set fits, best first.
+#
+# Lossless leads, so a graph with a couple of pictures gives up nothing at all.
+# It is listed knowing it rarely wins past two or three assets -- PNG is around
+# 270 KB for a 768x1344 photograph, so seventeen of them are 6 MB and over
+# budget -- but when it does fit there is no reason to send anything else.
+#
+# q95 is the workhorse: about a quarter of a percent mean pixel difference from
+# the original, at a quarter of the size. Below that the entries trade real
+# detail for room, and are only reached by sets that would otherwise be
+# refused outright.
+#
+# Worth remembering what the pixels are for. Pass A grounds the scene -- who is
+# where, facing which way, lit how, wearing what -- and Gemini downsamples to
+# media_resolution before it looks at any of it. Fine detail stops informing
+# that answer long before it stops being visible to a person.
+MEDIA_PROFILES = [
+    (None, "PNG",  None),   # lossless; wins on small sets
+    (1536, "JPEG", 95),
+    (1536, "JPEG", 88),
+    (1152, "JPEG", 85),
+    (896,  "JPEG", 82),
+    (768,  "JPEG", 80),
+    (640,  "JPEG", 75),
+    (512,  "JPEG", 70),
+]
+
+
+def _encode_image(frame, max_edge=None, fmt="PNG", quality=None) -> str:
+    """One frame, base64. `max_edge=None` keeps the source resolution.
+
+    Alpha is dropped: none of the slots carry any, and it would only cost size.
+    """
     arr = (255.0 * frame.cpu().numpy()).clip(0, 255).astype(np.uint8)
+    img = Image.fromarray(arr)
+    if img.mode != "RGB":
+        img = img.convert("RGB")
+    if max_edge and max(img.size) > max_edge:
+        img.thumbnail((max_edge, max_edge), Image.LANCZOS)
     buf = io.BytesIO()
-    Image.fromarray(arr).save(buf, format="PNG")
+    if fmt == "PNG":
+        img.save(buf, format="PNG", optimize=True)
+    else:
+        img.save(buf, format="JPEG", quality=quality, optimize=True)
     return base64.b64encode(buf.getvalue()).decode("ascii")
+
+
+def _tensor_to_png_b64(frame) -> str:
+    """Kept for callers that want one frame at the default profile."""
+    return _encode_image(frame)
+
+
+def _fit_media(frames, budget=MEDIA_BUDGET_BYTES):
+    """([base64, ...], note). Steps down until the whole set fits the budget.
+
+    Measured on the real set rather than assumed per image, because how well a
+    frame compresses varies enormously -- a flat studio background and a busy
+    outdoor scene differ several-fold at identical settings.
+    """
+    if not frames:
+        return [], ""
+    for i, (edge, fmt, q) in enumerate(MEDIA_PROFILES):
+        encoded = [_encode_image(f, edge, fmt, q) for f in frames]
+        total = sum(len(e) for e in encoded) * 3 // 4
+        if total <= budget or i == len(MEDIA_PROFILES) - 1:
+            if i == 0:
+                return encoded, ""          # lossless, nothing to report
+            how = ("%dpx q%d" % (edge, q)) if edge else ("q%d" % q)
+            return encoded, ("%d assets exceed the request budget as PNG; sent "
+                             "as %s (%.1f MB)." % (len(frames), how, total / 1e6))
+    return [], ""
 
 
 def _audio_to_wav_b64(audio) -> str:
@@ -92,15 +172,25 @@ def _audio_to_wav_b64(audio) -> str:
     return base64.b64encode(buf.getvalue()).decode("ascii")
 
 
-def _sample_keyframes(frames, fps: float, count: int = VIDEO_KEYFRAMES) -> list:
+def _keyframe_indices(frames, count: int = VIDEO_KEYFRAMES) -> list:
+    """Which frames to send, evenly spread across the clip including both ends.
+
+    Separate from encoding them so the selection can happen before anything is
+    sized -- the keyframes share their budget with the still images.
+    """
     total = int(frames.shape[0])
     if total == 0:
         return []
     count = min(count, total)
-    idxs = [int(round(i * (total - 1) / max(1, count - 1))) for i in range(count)] \
-        if count > 1 else [0]
-    return [{"t": i / float(fps or 24.0), "data": _tensor_to_png_b64(frames[i])}
-            for i in idxs]
+    if count <= 1:
+        return [0]
+    return [int(round(i * (total - 1) / (count - 1))) for i in range(count)]
+
+
+def _sample_keyframes(frames, fps: float, count: int = VIDEO_KEYFRAMES) -> list:
+    """Kept for anything calling this directly; encodes at the default profile."""
+    return [{"t": i / float(fps or 24.0), "data": _encode_image(frames[i])}
+            for i in _keyframe_indices(frames, count)]
 
 
 # ---------------------------------------------------------------------------
@@ -306,6 +396,16 @@ class H3ContextIR:
                                "workflow JSON and travels with every copy you share. "
                                "Prefer AIORBUST_LICENSE_KEY in the pod environment, or "
                                "put the key in /workspace/aiorbust/license.key."}),
+                # Appended after license_key, not slotted in beside `intent`
+                # where it belongs visually. ComfyUI stores widget values by
+                # position, so inserting it there would shift every later value
+                # in every saved workflow onto the wrong input. Ugly beats wrong.
+                "intent_preset": (INTENT_PRESETS, {
+                    "default": INTENT_CUSTOM,
+                    "tooltip": "A named intent held by the Aiorbust service. "
+                               "Anything but Custom REPLACES the intent box, so "
+                               "the prompt itself never has to live in the "
+                               "workflow file. Custom uses what you typed."}),
             },
         }
 
@@ -322,7 +422,8 @@ class H3ContextIR:
             media_resolution="low", video_audio=None,
             ref_audio_1=None, ref_audio_2=None,
             gemini_api_key="", grok_api_key="", vertex_json_folder="",
-            license_key="", grounding_override="", guide_folder=""):
+            license_key="", grounding_override="", guide_folder="",
+            intent_preset=INTENT_CUSTOM):
 
         key = _license_key(license_key)
 
@@ -338,7 +439,12 @@ class H3ContextIR:
 
         # Connection order decides labelling: the first supplied slot becomes
         # <Picture 1>. Skipping image_3 never leaves a gap in the numbering.
-        images = []
+        # Collect first, encode once. The budget covers the whole request, so
+        # the pictures and the video keyframes cannot be sized independently:
+        # eight keyframes at full detail push six modest images over on their
+        # own. Frames are gathered here, sized together below, and handed back
+        # to the structures that name them.
+        specs, frames = [], []
         for slot, tensor, role in (("image_1", image_1, image_1_role),
                                    ("image_2", image_2, image_2_role),
                                    ("image_3", image_3, ROLE_REFERENCE),
@@ -347,16 +453,31 @@ class H3ContextIR:
                                    ("image_6", image_6, ROLE_REFERENCE)):
             if tensor is None:
                 continue
-            images.append({"slot": slot, "role": role,
-                           "data": _tensor_to_png_b64(tensor[0])})
+            specs.append({"slot": slot, "role": role})
+            frames.append(tensor[0])
 
         # A batch arrives as one IMAGE tensor of N frames; each becomes its own
         # labelled picture, after the discrete slots.
         if images_batch is not None:
             for i in range(int(images_batch.shape[0])):
-                images.append({"slot": "images_batch_%d" % (i + 1),
-                               "role": ROLE_REFERENCE,
-                               "data": _tensor_to_png_b64(images_batch[i])})
+                specs.append({"slot": "images_batch_%d" % (i + 1),
+                              "role": ROLE_REFERENCE})
+                frames.append(images_batch[i])
+
+        video_times = []
+        if video is not None:
+            for idx in _keyframe_indices(video, int(video_keyframes)):
+                video_times.append(idx / float(video_fps or 24.0))
+                frames.append(video[idx])
+
+        encoded, fit_note = _fit_media(frames)
+        if fit_note:
+            print("\u26a0\ufe0f  [H3 Context-IR] %s" % fit_note)
+
+        images = [dict(spec, data=data)
+                  for spec, data in zip(specs, encoded[:len(specs)])]
+        video_frames = [{"t": t, "data": d}
+                        for t, d in zip(video_times, encoded[len(specs):])]
 
         audio = []
         for slot, clip in (("video_audio", video_audio),
@@ -373,14 +494,14 @@ class H3ContextIR:
             "max_tokens": int(max_tokens),
             "media_resolution": media_resolution,
             "intent": intent,
+            "intent_preset": intent_preset,
             "aspect_ratio": aspect_ratio,
             "target_model": target_model,
             "duration_seconds": float(duration_seconds),
             "fps": float(video_fps),
             "images": images,
             "video": ({"slot": "video", "fps": float(video_fps),
-                       "frames": _sample_keyframes(video, video_fps,
-                                                   int(video_keyframes))}
+                       "frames": video_frames}
                       if video is not None else None),
             "audio": audio,
             "grounding_override": grounding_override,
