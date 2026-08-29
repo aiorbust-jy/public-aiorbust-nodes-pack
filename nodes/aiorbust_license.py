@@ -91,6 +91,93 @@ def _pod_fingerprint():
     return "unknown"
 
 
+def check(entitlement="", widget_value="", label="Aiorbust"):
+    """Gate one node on a valid licence. Returns the key; raises if not licensed.
+
+    One line at the top of a node's execute method:
+
+        from .aiorbust_license import check
+        check("nano_banana_aio", license_key, label="NB AIO")
+
+    Deliberately a small gate, not a strong one. The node's code is still here
+    and someone determined can delete this call -- what it stops is a workflow
+    plus pack changing hands and simply working, which is the thing actually
+    being resold. It costs one HTTP round trip on the first run and nothing
+    afterwards, because the answer is cached for as long as the service says.
+
+    Failure behaviour matches the licence node's, and for the same reason: an
+    outage here must not kill a render someone has already paid for. A key that
+    verified recently rides on its cached answer; one that never verified has
+    nothing to fall back on and stops.
+    """
+    key, source = resolve_key(widget_value)
+    if not key:
+        raise RuntimeError(
+            "[%s] No Aiorbust licence key found.\n"
+            "-> Set AIORBUST_LICENSE_KEY in the pod environment, drop the key "
+            "in /workspace/aiorbust/license.key, or fill the license_key "
+            "widget." % label)
+
+    shown = key[:8] + "..." if len(key) > 8 else key
+    hit = _cache.get(key)
+    if hit and time.time() < hit["expires"]:
+        if entitlement and not _grants(hit.get("entitlements"), entitlement):
+            raise RuntimeError(_denied(label, entitlement, hit, source))
+        return key
+
+    try:
+        resp = requests.post(
+            "%s/v1/verify" % API_URL.rstrip("/"),
+            # "" not None: the service types this field as str, so a null is a
+            # 422 rather than "just tell me the key is good".
+            json={"license_key": key, "client_version": CLIENT_VERSION,
+                  "entitlement": entitlement or ""},
+            timeout=30,
+            headers={"X-Pod-Fingerprint": _pod_fingerprint()},
+        )
+    except requests.exceptions.RequestException as e:
+        if hit:
+            print("[%s] Licence service unreachable (%s) - continuing on the "
+                  "last good answer for %s." % (label, e, shown))
+            return key
+        raise RuntimeError(
+            "[%s] Could not reach the Aiorbust service at %s (%s).\n"
+            "-> Check the pod has outbound internet." % (label, API_URL, e))
+
+    if resp.status_code >= 400:
+        try:
+            detail = resp.json().get("detail") or resp.text[:300]
+        except Exception:
+            detail = resp.text[:300]
+        raise RuntimeError("[%s] %s\n-> Key read from: %s"
+                           % (label, detail, source))
+
+    data = resp.json()
+    ttl = int(data.get("ttl_seconds") or _DEFAULT_TTL)
+    ents = data.get("entitlements") or []
+    _cache[key] = {"expires": time.time() + ttl,
+                   "plan": data.get("plan", "?"),
+                   "entitlements": ents}
+    if entitlement and not _grants(ents, entitlement):
+        raise RuntimeError(_denied(label, entitlement, _cache[key], source))
+    print("[%s] Licence %s OK - plan %s" % (label, shown, data.get("plan", "?")))
+    return key
+
+
+def _grants(entitlements, wanted):
+    """`*` grants everything, which is how the founding keys are written."""
+    ents = entitlements or []
+    return "*" in ents or wanted in ents
+
+
+def _denied(label, entitlement, hit, source):
+    return ("[%s] This licence does not include %r.\n"
+            "-> Plan %s grants: %s\n"
+            "-> Key read from: %s"
+            % (label, entitlement, hit.get("plan", "?"),
+               ", ".join(hit.get("entitlements") or []) or "nothing", source))
+
+
 class AiorbustLicense:
     @classmethod
     def INPUT_TYPES(cls):
@@ -176,8 +263,13 @@ class AiorbustLicense:
 
         data = resp.json()
         ttl = int(data.get("ttl_seconds") or _DEFAULT_TTL)
-        _cache[key] = {"expires": time.time() + ttl, "plan": data.get("plan", "?")}
         ent = data.get("entitlements") or []
+        # Entitlements go in the cache too. check() reads the same dict, and a
+        # hit written here without them would look like a licence that grants
+        # nothing -- so this node running first would deny every gated node.
+        _cache[key] = {"expires": time.time() + ttl,
+                       "plan": data.get("plan", "?"),
+                       "entitlements": ent}
         print("[Aiorbust License] %s OK - plan %s, grants %s (from %s)"
               % (shown, data.get("plan", "?"),
                  "everything" if "*" in ent else ", ".join(ent) or "nothing",

@@ -19,6 +19,8 @@ by the public Aiorbust workflows.
 | `GeminiPromptNode` | Aiorbust Prompt Generator | Aiorbust/Prompt | Analyzes images / writes prompts via Gemini, Vertex AI or Grok; built-in JSON-analysis, style-transfer and Seedream-edit modes (has JS UI) — see note below |
 | `AiorbustSpeedHDSampler` | Aiorbust Speed HD Sampler | Aiorbust/Sampling | Spectral progressive-diffusion SAMPLER (feed into SamplerCustomAdvanced); requires `scipy`, plus `PyWavelets` only for `transform=dwt` |
 | `VideoFrameExtractorNode` | Aiorbust Video Frame Extractor | image | Extracts one frame from a video file in `input/`, or from a connected IMAGE batch (which replaces the file dropdown entirely); requires `av` |
+| `NanoBananaAIO` | Aiorbust Image and Video Edit AIO | Aiorbust/NanoBanana | Multi-provider image & video generation (Vertex, Google, WaveSpeed, KIE, FAL). Needs `google-genai`, your own provider keys, **and an Aiorbust licence** |
+| `AiorbustLicense` | Aiorbust License | Aiorbust | One key for the whole graph; wire its output into any licensed node's `license_key` input |
 | `AiorbustEyeBBoxDetectorProvider` | Aiorbust HD Ultralytic BBox Loader | Aiorbust/Detailer | Ultralytics BBox loader with forced `imgsz=1280` for small objects (eyes) — see note below |
 | `AiorbustDetailer` | Aiorbust Detailer | Aiorbust/Detailer | FaceDetailer clone with selectable paste-back interpolation, sharpness & color-match — see note below |
 

@@ -24,12 +24,15 @@ by the public Aiorbust workflows:
     - Aiorbust Load API Keys             (LoadAPIKeysNode)
     - Aiorbust Video Frame Extractor     (VideoFrameExtractorNode)
     - Aiorbust License                   (AiorbustLicense)
+    - Aiorbust Image and Video Edit AIO  (NanoBananaAIO)***
     - Aiorbust HD Ultralytic BBox Loader (AiorbustEyeBBoxDetectorProvider)*
     - Aiorbust Detailer                  (AiorbustDetailer)*
 
     * The two Detailer nodes require ComfyUI-Impact-Pack and
       ComfyUI-Impact-Subpack to be installed (resolved lazily at run time).
     ** The Speed HD Sampler needs scipy (and PyWavelets only for transform=dwt).
+    *** The AIO node needs google-genai, and a licence: it verifies with the
+        Aiorbust service before it will run.
     Wire Aiorbust License into the license_key input of the licensed nodes,
     or set AIORBUST_LICENSE_KEY and leave them alone.
 
@@ -165,6 +168,20 @@ try:
 except Exception as _e:
     print(f"[public-aiorbust-pack] Speed HD Sampler not loaded "
           f"(needs scipy): {_e}")
+
+# The AIO node imports google.genai and aiohttp at module load. Load it
+# defensively for the same reason as the two above: a missing dependency should
+# cost one node, not the whole pack.
+try:
+    from .nodes.nano_banana_aio import (
+        NODE_CLASS_MAPPINGS as _aio_cls,
+        NODE_DISPLAY_NAME_MAPPINGS as _aio_disp,
+    )
+    NODE_CLASS_MAPPINGS.update(_aio_cls)
+    NODE_DISPLAY_NAME_MAPPINGS.update(_aio_disp)
+except Exception as _e:
+    print(f"[public-aiorbust-pack] Image and Video Edit AIO not loaded "
+          f"(needs google-genai): {_e}")
 
 # ---------------------------------------------------------------------------
 # Stand down against the private pack.
