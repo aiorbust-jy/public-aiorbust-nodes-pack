@@ -32,7 +32,7 @@ import requests
 
 import folder_paths
 
-DEFAULT_API_URL = "https://aiorbust-h3-ir-server.vercel.app"
+DEFAULT_API_URL = "https://aiorbust-h3-ir.onrender.com"
 API_URL = os.environ.get("AIORBUST_API_URL", "").strip() or DEFAULT_API_URL
 CLIENT_VERSION = "0.3.0"
 
