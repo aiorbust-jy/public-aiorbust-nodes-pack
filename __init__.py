@@ -23,7 +23,6 @@ by the public Aiorbust workflows:
     - H3 Context-IR (Gemini)             (H3ContextIR)
     - Aiorbust Load API Keys             (LoadAPIKeysNode)
     - Aiorbust Video Frame Extractor     (VideoFrameExtractorNode)
-    - Aiorbust Image and Video Edit AIO  (NanoBananaAIO)***
     - Aiorbust License                   (AiorbustLicense)
     - Aiorbust HD Ultralytic BBox Loader (AiorbustEyeBBoxDetectorProvider)*
     - Aiorbust Detailer                  (AiorbustDetailer)*
@@ -34,9 +33,6 @@ by the public Aiorbust workflows:
     Wire Aiorbust License into the license_key input of the licensed nodes,
     or set AIORBUST_LICENSE_KEY and leave them alone.
 
-    *** Licensed. The node here is the interface; the generation runs on the
-        Aiorbust service. Needs an Aiorbust licence key and your own provider
-        API keys. See nodes/nano_banana_aio.py for where the key is read from.
 """
 
 from .nodes.aiorbust_image_batch_loader import (
@@ -103,10 +99,6 @@ from .nodes.video_frame_extractor import (
     NODE_CLASS_MAPPINGS as _vfx_cls,
     NODE_DISPLAY_NAME_MAPPINGS as _vfx_disp,
 )
-from .nodes.nano_banana_aio import (
-    NODE_CLASS_MAPPINGS as _nbaio_cls,
-    NODE_DISPLAY_NAME_MAPPINGS as _nbaio_disp,
-)
 from .nodes.aiorbust_license import (
     NODE_CLASS_MAPPINGS as _lic_cls,
     NODE_DISPLAY_NAME_MAPPINGS as _lic_disp,
@@ -135,7 +127,6 @@ for _cls, _disp in (
     (_ctxir_cls, _ctxir_disp),
     (_apikeys_cls, _apikeys_disp),
     (_vfx_cls, _vfx_disp),
-    (_nbaio_cls, _nbaio_disp),
     (_lic_cls, _lic_disp),
 ):
     NODE_CLASS_MAPPINGS.update(_cls)
@@ -175,8 +166,7 @@ except Exception as _e:
     print(f"[public-aiorbust-pack] Speed HD Sampler not loaded "
           f"(needs scipy): {_e}")
 
-# JS UI assets (Image Batch Loader, Prompt Generator, Group Toggle,
-# and the AIO node's widget visibility / preset / preview extensions)
+# JS UI assets (Image Batch Loader + Prompt Generator + Group Toggle)
 WEB_DIRECTORY = "./js"
 
 print(f"[public-aiorbust-pack] Loaded {len(NODE_CLASS_MAPPINGS)} nodes: "
