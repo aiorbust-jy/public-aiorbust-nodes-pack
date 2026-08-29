@@ -166,6 +166,69 @@ except Exception as _e:
     print(f"[public-aiorbust-pack] Speed HD Sampler not loaded "
           f"(needs scipy): {_e}")
 
+# ---------------------------------------------------------------------------
+# Stand down against the private pack.
+#
+# This pack is a subset of aiorbust-ofm-pack and shares most of its node ids.
+# ComfyUI keeps one global registry, so on a machine carrying both, the pack
+# that imports last wins -- and that order is alphabetical, so this one wins.
+# On a customer pod that is correct and this code does nothing. On a development
+# machine carrying both it is backwards: the licensed stub of H3 Context-IR
+# would shadow the full local node it is a stub OF.
+#
+# The private pack writes .aiorbust-private naming what it owns; anything on
+# that list is dropped here. Set AIORBUST_IGNORE_PRIVATE=1 to suppress this and
+# force the public build to register -- which is how you test the licensed path
+# on a machine that also has the private pack.
+def _private_pack_node_ids():
+    import json
+    import os
+
+    if os.environ.get("AIORBUST_IGNORE_PRIVATE", "").strip():
+        return None, "AIORBUST_IGNORE_PRIVATE"
+
+    custom_nodes = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    try:
+        siblings = sorted(os.listdir(custom_nodes))
+    except OSError:
+        return None, None
+
+    here = os.path.basename(os.path.dirname(os.path.abspath(__file__)))
+    for name in siblings:
+        if name == here:
+            continue
+        marker = os.path.join(custom_nodes, name, ".aiorbust-private")
+        if not os.path.isfile(marker):
+            continue
+        try:
+            with open(marker, "r", encoding="utf-8") as fh:
+                ids = json.load(fh).get("node_ids") or []
+            # An empty list means the private pack imported but registered
+            # nothing -- a broken install, not a claim of ownership. Deferring
+            # to it would leave the user with no nodes from either pack.
+            if ids:
+                return set(ids), name
+        except (OSError, ValueError) as exc:
+            print(f"[public-aiorbust-pack] Ignoring unreadable {marker}: {exc}")
+    return None, None
+
+
+_owned, _owner = _private_pack_node_ids()
+if _owner == "AIORBUST_IGNORE_PRIVATE":
+    print("[public-aiorbust-pack] AIORBUST_IGNORE_PRIVATE set — registering "
+          "everything, including ids the private pack may also claim.")
+elif _owned:
+    _dropped = sorted(set(NODE_CLASS_MAPPINGS) & _owned)
+    for _node_id in _dropped:
+        NODE_CLASS_MAPPINGS.pop(_node_id, None)
+        NODE_DISPLAY_NAME_MAPPINGS.pop(_node_id, None)
+    if _dropped:
+        print(f"[public-aiorbust-pack] {_owner} is installed and owns "
+              f"{len(_dropped)} of these nodes — leaving them to it: "
+              f"{', '.join(_dropped)}")
+        print("[public-aiorbust-pack] Set AIORBUST_IGNORE_PRIVATE=1 to register "
+              "them here instead (e.g. to test the licensed nodes).")
+
 # JS UI assets (Image Batch Loader + Prompt Generator + Group Toggle)
 WEB_DIRECTORY = "./js"
 
