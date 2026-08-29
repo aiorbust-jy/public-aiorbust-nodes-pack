@@ -26,7 +26,7 @@ from PIL import Image
 # The live service. Not a secret — it is a public HTTPS endpoint, and every
 # request to it is licence-checked. Overridable so you can point a pod at a
 # staging deployment without shipping a different client.
-DEFAULT_API_URL = "https://aiorbust-h3-ir.onrender.com"
+DEFAULT_API_URL = "https://aiorbust-h3-ir.fly.dev"
 API_URL = os.environ.get("AIORBUST_API_URL", "").strip() or DEFAULT_API_URL
 TIMEOUT = 600
 CLIENT_VERSION = "0.2.0"
