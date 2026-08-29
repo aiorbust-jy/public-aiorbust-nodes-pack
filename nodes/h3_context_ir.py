@@ -414,6 +414,22 @@ class H3ContextIR:
     FUNCTION = "run"
     CATEGORY = "Aiorbust/Prompt"
 
+    @classmethod
+    def IS_CHANGED(cls, **kwargs):
+        """Always re-run.
+
+        Without this ComfyUI replays the previous output whenever the inputs
+        are unchanged, so re-queueing the same graph returns the same prompt
+        and never reaches the service at all. That is the wrong default here:
+        the whole point of queueing again is usually to get a different take.
+
+        Re-running is cheaper than it looks. The service caches pass A on the
+        media itself, so the vision call -- the expensive half -- is served
+        from cache and only pass B runs again. A fresh prompt for the cost of
+        the compile, not the grounding.
+        """
+        return float("nan")
+
     def run(self, intent, duration_seconds, aspect_ratio, target_model, provider, model,
             max_tokens, image_1=None, image_1_role=ROLE_REFERENCE,
             image_2=None, image_2_role=ROLE_REFERENCE,
