@@ -50,20 +50,21 @@ TARGETS = [TARGET_H3, TARGET_SEEDANCE]
 # One flat combo shared by every provider — `provider` is chosen separately, so
 # pick a model that belongs to the provider you selected.
 #
-# The Grok ids mirror GROK_MODELS in the service (app/prompts.py). xAI has no
-# "-vision" variants: Grok 4.x is natively multimodal, which is why the old
-# "grok-4-vision" came back from api.x.ai as `400 Model not found`. The service
-# forwards `model` verbatim, so anything valid at xAI works here.
+# xAI has no "-vision" variants: Grok 4.x is natively multimodal, which is why
+# the old "grok-4-vision" came back from api.x.ai as `400 Model not found`.
+# This node always sends images, so only image-capable ids belong here.
+# grok-4.6 and grok-4.5 are documented as text+image input; grok-4.3 is the
+# migration target xAI names for the slugs retired on 2026-05-15
+# (grok-4-1-fast-*, grok-4-fast-reasoning, grok-4-0709).
+# The service forwards `model` verbatim and does not validate it.
 MODELS = [
     # Gemini / Vertex
     "gemini-3.6-flash",
     "gemini-3.6-pro",
     # Grok (xAI) — needs provider="Grok" and a grok_api_key
-    "grok-4.20-0309-reasoning",
-    "grok-4.20-0309-non-reasoning",
-    "grok-4-1-fast-reasoning",
-    "grok-4-1-fast-non-reasoning",
-    "grok-2-vision-1212",
+    "grok-4.6",
+    "grok-4.5",
+    "grok-4.3",
 ]
 
 VIDEO_KEYFRAMES = 8
