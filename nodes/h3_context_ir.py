@@ -47,7 +47,24 @@ PROVIDERS = ["Gemini", "Vertex", "Grok"]
 TARGET_H3 = "MiniMax H3"
 TARGET_SEEDANCE = "Seedance"
 TARGETS = [TARGET_H3, TARGET_SEEDANCE]
-MODELS = ["gemini-3.6-flash", "gemini-3.6-pro", "grok-4-vision"]
+# One flat combo shared by every provider — `provider` is chosen separately, so
+# pick a model that belongs to the provider you selected.
+#
+# The Grok ids mirror GROK_MODELS in the service (app/prompts.py). xAI has no
+# "-vision" variants: Grok 4.x is natively multimodal, which is why the old
+# "grok-4-vision" came back from api.x.ai as `400 Model not found`. The service
+# forwards `model` verbatim, so anything valid at xAI works here.
+MODELS = [
+    # Gemini / Vertex
+    "gemini-3.6-flash",
+    "gemini-3.6-pro",
+    # Grok (xAI) — needs provider="Grok" and a grok_api_key
+    "grok-4.20-0309-reasoning",
+    "grok-4.20-0309-non-reasoning",
+    "grok-4-1-fast-reasoning",
+    "grok-4-1-fast-non-reasoning",
+    "grok-2-vision-1212",
+]
 
 VIDEO_KEYFRAMES = 8
 AUDIO_SR = 16000    # mono 16-bit at 16 kHz: speech-grade, small enough inline
