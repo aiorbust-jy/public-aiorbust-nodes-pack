@@ -47,24 +47,29 @@ PROVIDERS = ["Gemini", "Vertex", "Grok"]
 TARGET_H3 = "MiniMax H3"
 TARGET_SEEDANCE = "Seedance"
 TARGETS = [TARGET_H3, TARGET_SEEDANCE]
-# One flat combo shared by every provider — `provider` is chosen separately, so
-# pick a model that belongs to the provider you selected.
+# Mirrors _MODELS + _GROK_MODELS in the private pack's H3 node
+# (aiorbust-ofm-pack/nodes/h3_context_ir.py), which is the source of truth for
+# this node's model ids. The two lists are kept identical so a workflow saved
+# against one pack validates against the other -- ComfyUI rejects a combo value
+# that is not in the list, so a divergent list breaks saved graphs outright.
 #
-# xAI has no "-vision" variants: Grok 4.x is natively multimodal, which is why
-# the old "grok-4-vision" came back from api.x.ai as `400 Model not found`.
-# This node always sends images, so only image-capable ids belong here.
-# grok-4.6 and grok-4.5 are documented as text+image input; grok-4.3 is the
-# migration target xAI names for the slugs retired on 2026-05-15
-# (grok-4-1-fast-*, grok-4-fast-reasoning, grok-4-0709).
-# The service forwards `model` verbatim and does not validate it.
+# One flat combo shared by every provider: `provider` is chosen separately, so
+# pick a model that belongs to the provider you selected. The service forwards
+# `model` verbatim and does not validate it, so an id the upstream API no
+# longer serves fails at that API rather than here.
 MODELS = [
     # Gemini / Vertex
     "gemini-3.6-flash",
-    "gemini-3.6-pro",
-    # Grok (xAI) — needs provider="Grok" and a grok_api_key
-    "grok-4.6",
-    "grok-4.5",
-    "grok-4.3",
+    "gemini-3.5-flash",
+    "gemini-3.1-pro-preview",
+    "gemini-2.5-pro",
+    "gemini-2.5-flash",
+    # Grok (xAI) -- needs provider="Grok" and a grok_api_key
+    "grok-4.20-0309-reasoning",
+    "grok-4.20-0309-non-reasoning",
+    "grok-4-1-fast-reasoning",
+    "grok-4-1-fast-non-reasoning",
+    "grok-2-vision-1212",
 ]
 
 VIDEO_KEYFRAMES = 8
