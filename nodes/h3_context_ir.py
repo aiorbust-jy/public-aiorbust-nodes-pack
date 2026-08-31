@@ -525,13 +525,15 @@ class H3ContextIR:
         # away by the service, and the user reads whatever the server put in
         # `detail` rather than a message naming the places a key can live.
         #
-        # No entitlement name is passed. The service decides which plan may
-        # call this node and re-checks the key on every request; naming an
-        # entitlement here would mean guessing a string it may not issue,
-        # and locking out otherwise valid keys if the guess is wrong.
+        # The entitlement matches the service exactly: app/nodes/h3_context_ir.py
+        # registers this node with entitlement="h3_context_ir", and
+        # /v1/nodes/H3ContextIR validates against that same string. Checking it
+        # here only moves the same refusal earlier -- a key without the
+        # entitlement was always going to be turned away, now it happens before
+        # the upload and says which plan grants what.
         if _license_check is not None:
-            key = _license_check("", license_key, label="H3 Context-IR",
-                                 prompt=aiorbust_graph)
+            key = _license_check("h3_context_ir", license_key,
+                                 label="H3 Context-IR", prompt=aiorbust_graph)
         else:
             key = _license_key(license_key, aiorbust_graph)
 
