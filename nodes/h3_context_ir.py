@@ -23,6 +23,16 @@ import numpy as np
 import requests
 from PIL import Image
 
+# The licence gate lives in aiorbust_license so both gated nodes share one
+# implementation. Imported defensively: this file is the customer-facing stub
+# and must still load if that module is ever absent, in which case the local
+# resolver below is used and the service stays the only gate -- which it is
+# in every case anyway, since it re-checks the key on every request.
+try:
+    from .aiorbust_license import check as _license_check
+except Exception:
+    _license_check = None
+
 # The live service. Not a secret — it is a public HTTPS endpoint, and every
 # request to it is licence-checked. Overridable so you can point a pod at a
 # staging deployment without shipping a different client.
@@ -510,7 +520,20 @@ class H3ContextIR:
             license_key="", grounding_override="", guide_folder="",
             intent_preset=INTENT_CUSTOM, aiorbust_graph=None):
 
-        key = _license_key(license_key, aiorbust_graph)
+        # Gate BEFORE the payload is built. Without this an unlicensed run
+        # encodes and uploads several MB of base64 media only to be turned
+        # away by the service, and the user reads whatever the server put in
+        # `detail` rather than a message naming the places a key can live.
+        #
+        # No entitlement name is passed. The service decides which plan may
+        # call this node and re-checks the key on every request; naming an
+        # entitlement here would mean guessing a string it may not issue,
+        # and locking out otherwise valid keys if the guess is wrong.
+        if _license_check is not None:
+            key = _license_check("", license_key, label="H3 Context-IR",
+                                 prompt=aiorbust_graph)
+        else:
+            key = _license_key(license_key, aiorbust_graph)
 
         if provider == "Vertex":
             credential = _vertex_credential(vertex_json_folder)
