@@ -1,8 +1,14 @@
-"""Aiorbust License -- one key, wired into every licensed node.
+"""Aiorbust License -- one key, picked up by every licensed node.
 
-Put this node once at the top of a graph and connect its output to the
-license_key input of H3 Context-IR, the AIO node, and anything else licensed.
-Beats retyping the key into each node, and beats forgetting to.
+Drop this node once anywhere in the graph and type the key into it. Every
+licensed node in the same graph finds it on its own; the output is still there
+for anyone who prefers an explicit wire, but nothing has to be connected.
+
+That works because a licensed node is handed the whole queued prompt (ComfyUI's
+hidden PROMPT input) and reads this node's widget straight out of it. No
+execution order to get wrong, no wire to forget, and it holds even when this
+node sits unconnected in a corner of the canvas -- ComfyUI would never execute
+it there, but the key is in the prompt all the same.
 
 It also checks the key before anything else runs. Without it a bad key is
 discovered by whichever licensed node happens to execute first, which on a
@@ -18,7 +24,8 @@ the same order, so adding this node never changes which key is used:
     ComfyUI/user/aiorbust/license.key
     license.key beside this pack
     ~/.aiorbust/license.key
-    the license_key widget -- last, deliberately
+    the node's own license_key widget -- last, deliberately
+    this node's license_key widget, read out of the prompt -- last of all
 
 The widget is last because ComfyUI saves widget values into the workflow JSON.
 A key typed there travels with every copy of that graph the user shares, and
@@ -70,9 +77,48 @@ def _read_key_file(path):
     return ""
 
 
-def resolve_key(widget_value=""):
+# Node ids whose license_key widget counts as the graph-wide key. A tuple
+# rather than a bare string so the private pack's own licence node, which
+# registers under a different id, can be added without touching the callers.
+LICENSE_NODE_CLASS_TYPES = ("AiorbustLicense",)
+
+
+def key_from_prompt(prompt):
+    """The key typed into the Aiorbust License node of the queued graph.
+
+    `prompt` is ComfyUI's hidden PROMPT input: {node_id: {"class_type": ...,
+    "inputs": {...}}} for every node in the graph, whether or not it will be
+    executed. Reading it here is what lets an unwired licence node still supply
+    the key -- an unwired node is never executed, so nothing it could set at
+    run time would ever be set.
+
+    Only a literal counts. An input that is wired shows up as [node_id, slot],
+    which is a link and not a key.
+    """
+    if not isinstance(prompt, dict):
+        return ""
+    # Sorted so two licence nodes in one graph resolve the same way on every
+    # queue, rather than following dict order.
+    for node_id in sorted(prompt, key=lambda k: (len(str(k)), str(k))):
+        node = prompt.get(node_id)
+        if not isinstance(node, dict):
+            continue
+        if node.get("class_type") not in LICENSE_NODE_CLASS_TYPES:
+            continue
+        value = (node.get("inputs") or {}).get("license_key")
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
+def resolve_key(widget_value="", prompt=None):
     """First hit wins. Files are re-read every call, so dropping a key in
-    works on the next queue with no ComfyUI restart."""
+    works on the next queue with no ComfyUI restart.
+
+    The licence node's widget is consulted last, after the calling node's own,
+    so wiring or typing a key directly into a node still overrides the shared
+    one -- useful when a single graph runs two different licences.
+    """
     key = os.environ.get("AIORBUST_LICENSE_KEY", "").strip()
     if key:
         return key, "AIORBUST_LICENSE_KEY"
@@ -80,7 +126,13 @@ def resolve_key(widget_value=""):
         key = _read_key_file(path)
         if key:
             return key, path
-    return (widget_value or "").strip(), "license_key widget"
+    key = (widget_value or "").strip()
+    if key:
+        return key, "license_key widget"
+    key = key_from_prompt(prompt)
+    if key:
+        return key, "the Aiorbust License node in this graph"
+    return "", "license_key widget"
 
 
 def _pod_fingerprint():
@@ -91,13 +143,18 @@ def _pod_fingerprint():
     return "unknown"
 
 
-def check(entitlement="", widget_value="", label="Aiorbust"):
+def check(entitlement="", widget_value="", label="Aiorbust", prompt=None):
     """Gate one node on a valid licence. Returns the key; raises if not licensed.
 
     One line at the top of a node's execute method:
 
         from .aiorbust_license import check
-        check("nano_banana_aio", license_key, label="NB AIO")
+        check("nano_banana_aio", license_key, label="NB AIO", prompt=prompt)
+
+    Pass `prompt` through from a hidden PROMPT input and the node picks up
+    the key from an Aiorbust License node anywhere in the graph, connected
+    or not. Omit it and only the environment, the key files and this node's
+    own widget are consulted, which is the old behaviour.
 
     Deliberately a small gate, not a strong one. The node's code is still here
     and someone determined can delete this call -- what it stops is a workflow
@@ -110,13 +167,13 @@ def check(entitlement="", widget_value="", label="Aiorbust"):
     verified recently rides on its cached answer; one that never verified has
     nothing to fall back on and stops.
     """
-    key, source = resolve_key(widget_value)
+    key, source = resolve_key(widget_value, prompt)
     if not key:
         raise RuntimeError(
             "[%s] No Aiorbust licence key found.\n"
             "-> Set AIORBUST_LICENSE_KEY in the pod environment, drop the key "
-            "in /workspace/aiorbust/license.key, or fill the license_key "
-            "widget." % label)
+            "in /workspace/aiorbust/license.key, or add an Aiorbust License "
+            "node to the graph and type the key into it." % label)
 
     shown = key[:8] + "..." if len(key) > 8 else key
     hit = _cache.get(key)
@@ -188,9 +245,14 @@ class AiorbustLicense:
                     "default": "",
                     "multiline": False,
                     "placeholder": "Leave empty if AIORBUST_LICENSE_KEY is set",
-                    "tooltip": "Checked LAST. Prefer AIORBUST_LICENSE_KEY or a "
-                               "key file: a value typed here is saved into the "
-                               "workflow JSON and travels with any copy of it.",
+                    "tooltip": "A key typed here is used by every licensed node "
+                               "in this graph, whether or not the output below "
+                               "is wired to anything.\n\n"
+                               "Checked LAST, after AIORBUST_LICENSE_KEY, the "
+                               "key files and a node's own license_key widget. "
+                               "Prefer the env var or a key file: a value typed "
+                               "here is saved into the workflow JSON and travels "
+                               "with any copy of it.",
                 }),
                 "verify": ("BOOLEAN", {
                     "default": True,

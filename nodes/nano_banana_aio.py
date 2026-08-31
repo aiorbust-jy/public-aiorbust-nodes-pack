@@ -1235,10 +1235,20 @@ class NanoBananaAIO:
                                "key files. Prefer either of those: a key typed "
                                "here is saved into the workflow JSON and travels "
                                "with every copy of the graph you share.\n\n"
-                               "Wire the Aiorbust License node in here to use one "
-                               "key across the whole graph.",
+                               "Leave it empty and an Aiorbust License node "
+                               "anywhere in the graph supplies the key, wired "
+                               "in here or not.",
                 }),
             },
+            # The whole queued graph, injected by ComfyUI. Read only to find
+            # an Aiorbust License node's key, which is what lets that node sit
+            # unconnected: unconnected means never executed, so nothing it
+            # could hand over at run time would ever arrive.
+            #
+            # Named aiorbust_graph, not prompt: hidden inputs land in the same
+            # kwargs as the widgets, and this node already has a prompt widget
+            # that would be overwritten with the graph dict.
+            "hidden": {"aiorbust_graph": "PROMPT"},
         }
 
     RETURN_TYPES  = ("IMAGE", "STRING", "STRING")
@@ -1289,7 +1299,8 @@ class NanoBananaAIO:
         # Gate first, before a retry loop that can bill a provider several
         # times. Cached after the first call, so a graph with several licensed
         # nodes still makes one round trip per queue.
-        check("nano_banana_aio", kwargs.pop("license_key", ""), label="NB AIO")
+        check("nano_banana_aio", kwargs.pop("license_key", ""), label="NB AIO",
+              prompt=kwargs.pop("aiorbust_graph", None))
 
         attempts = max(0, int(kwargs.pop("max_black_retries", 0) or 0)) + 1
 

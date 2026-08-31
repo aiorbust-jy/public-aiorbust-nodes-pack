@@ -33,8 +33,10 @@ by the public Aiorbust workflows:
     ** The Speed HD Sampler needs scipy (and PyWavelets only for transform=dwt).
     *** The AIO node needs google-genai, and a licence: it verifies with the
         Aiorbust service before it will run.
-    Wire Aiorbust License into the license_key input of the licensed nodes,
-    or set AIORBUST_LICENSE_KEY and leave them alone.
+    Drop an Aiorbust License node anywhere in the graph and every licensed
+    node picks the key up from it -- no wire needed, though its output is
+    still there for anyone who wants one. Or set AIORBUST_LICENSE_KEY and
+    leave them all alone.
 
 """
 

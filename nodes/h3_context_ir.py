@@ -304,8 +304,38 @@ def _read_key_file(path: str) -> str:
     return ""
 
 
-def _license_key(widget_value: str) -> str:
-    """First hit wins: environment, then a key file, then the widget.
+# Node ids whose license_key widget counts as the graph-wide key.
+LICENSE_NODE_CLASS_TYPES = ("AiorbustLicense",)
+
+
+def _key_from_prompt(prompt) -> str:
+    """The key typed into an Aiorbust License node of the queued graph.
+
+    `prompt` is ComfyUI's hidden PROMPT input -- every node in the graph,
+    executed or not. Reading it here is what lets a licence node supply the key
+    while sitting unconnected: an unconnected node is never executed, so
+    anything it might pass along at run time never arrives.
+
+    Only a literal counts; a wired input shows up as [node_id, slot].
+    """
+    if not isinstance(prompt, dict):
+        return ""
+    # Sorted so two licence nodes in one graph resolve the same way every queue.
+    for node_id in sorted(prompt, key=lambda k: (len(str(k)), str(k))):
+        node = prompt.get(node_id)
+        if not isinstance(node, dict):
+            continue
+        if node.get("class_type") not in LICENSE_NODE_CLASS_TYPES:
+            continue
+        value = (node.get("inputs") or {}).get("license_key")
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
+def _license_key(widget_value: str, prompt=None) -> str:
+    """First hit wins: environment, then a key file, then the widget, then an
+    Aiorbust License node anywhere in the graph.
 
     Order is about leak risk, not convenience. A widget value is saved INTO the
     workflow JSON, so a customer who types their key there and then shares the
@@ -314,6 +344,10 @@ def _license_key(widget_value: str) -> str:
 
     Files are read on every call rather than cached, so dropping a key in works
     on the next queue with no ComfyUI restart.
+
+    The licence node comes after this node's own widget, so a key typed or
+    wired directly here still wins -- which is how one graph can run two
+    different licences.
     """
     key = os.environ.get("AIORBUST_LICENSE_KEY", "").strip()
     if key:
@@ -324,7 +358,11 @@ def _license_key(widget_value: str) -> str:
         if key:
             return key
 
-    return (widget_value or "").strip()
+    key = (widget_value or "").strip()
+    if key:
+        return key
+
+    return _key_from_prompt(prompt)
 
 
 def _pod_fingerprint() -> str:
@@ -418,7 +456,9 @@ class H3ContextIR:
                     "tooltip": "LAST RESORT. A key typed here is saved into the "
                                "workflow JSON and travels with every copy you share. "
                                "Prefer AIORBUST_LICENSE_KEY in the pod environment, or "
-                               "put the key in /workspace/aiorbust/license.key."}),
+                               "put the key in /workspace/aiorbust/license.key.\n\n"
+                               "Leave it empty and an Aiorbust License node anywhere "
+                               "in the graph supplies the key, wired in here or not."}),
                 # Appended after license_key, not slotted in beside `intent`
                 # where it belongs visually. ComfyUI stores widget values by
                 # position, so inserting it there would shift every later value
@@ -430,6 +470,12 @@ class H3ContextIR:
                                "the prompt itself never has to live in the "
                                "workflow file. Custom uses what you typed."}),
             },
+            # The whole queued graph, injected by ComfyUI. Read only to find an
+            # Aiorbust License node's key, which is what lets that node supply
+            # one while sitting unconnected. Named aiorbust_graph rather than
+            # prompt because hidden inputs arrive in the same kwargs as the
+            # widgets, and a collision there silently replaces a widget value.
+            "hidden": {"aiorbust_graph": "PROMPT"},
         }
 
     RETURN_TYPES = ("STRING", "STRING")
@@ -462,9 +508,9 @@ class H3ContextIR:
             ref_audio_1=None, ref_audio_2=None,
             gemini_api_key="", grok_api_key="", vertex_json_folder="",
             license_key="", grounding_override="", guide_folder="",
-            intent_preset=INTENT_CUSTOM):
+            intent_preset=INTENT_CUSTOM, aiorbust_graph=None):
 
-        key = _license_key(license_key)
+        key = _license_key(license_key, aiorbust_graph)
 
         if provider == "Vertex":
             credential = _vertex_credential(vertex_json_folder)
