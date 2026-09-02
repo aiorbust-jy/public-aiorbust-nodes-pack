@@ -42,19 +42,14 @@ TIMEOUT = 600
 CLIENT_VERSION = "0.2.0"
 NODE_ID = "H3ContextIR"
 
-# The two modes the service holds. Only the LABELS ship here; the prompt each
-# one stands for lives in app/intents.py and never reaches a pod.
-#
-# There is no "write your own" entry, and that is the point: the text is held
-# on the service precisely so it never lands in a workflow file, and a free
-# text option that could reproduce it would give the whole thing away.
-MODE_REFERENCE_VIDEO = 'reference image + video'
-MODE_FIRST_FRAME_REF = 'first frame + reference image'
+# Named intents the service holds. Only the LABELS ship here; the prompt
+# each one stands for lives in app/intents.py and never reaches a pod.
+INTENT_CUSTOM = 'Custom (use the intent box)'
 INTENT_PRESETS = [
-    MODE_REFERENCE_VIDEO,
-    MODE_FIRST_FRAME_REF,
+    'Custom (use the intent box)',
+    'Motion Control - corrected first frame',
+    'Motion Control - identity from picture',
 ]
-INTENT_DEFAULT = MODE_REFERENCE_VIDEO
 
 ROLE_REFERENCE = "reference"
 ROLES = [ROLE_REFERENCE, "first_frame", "last_frame"]
@@ -479,17 +474,11 @@ class H3ContextIR:
                 # position, so inserting it there would shift every later value
                 # in every saved workflow onto the wrong input. Ugly beats wrong.
                 "intent_preset": (INTENT_PRESETS, {
-                    "default": INTENT_DEFAULT,
-                    "tooltip": "Which mode the service compiles for.\n\n"
-                               "reference image + video: the woman comes from "
-                               "Picture 1; garments, camera, scene and timing "
-                               "come from Video 1.\n\n"
-                               "first frame + reference image: Picture 1 is the "
-                               "already-corrected first frame and the clip "
-                               "continues from it; Picture 2 confirms her face "
-                               "and hair.\n\n"
-                               "The mode supplies the prompt, so the intent box "
-                               "above is not read."}),
+                    "default": INTENT_CUSTOM,
+                    "tooltip": "A named intent held by the Aiorbust service. "
+                               "Anything but Custom REPLACES the intent box, so "
+                               "the prompt itself never has to live in the "
+                               "workflow file. Custom uses what you typed."}),
             },
             # The whole queued graph, injected by ComfyUI. Read only to find an
             # Aiorbust License node's key, which is what lets that node supply
@@ -529,7 +518,7 @@ class H3ContextIR:
             ref_audio_1=None, ref_audio_2=None,
             gemini_api_key="", grok_api_key="", vertex_json_folder="",
             license_key="", grounding_override="", guide_folder="",
-            intent_preset=INTENT_DEFAULT, aiorbust_graph=None):
+            intent_preset=INTENT_CUSTOM, aiorbust_graph=None):
 
         # Gate BEFORE the payload is built. Without this an unlicensed run
         # encodes and uploads several MB of base64 media only to be turned
