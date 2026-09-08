@@ -14,6 +14,7 @@ a video and returns a frame.
 
 import os
 import logging
+import random
 
 import av
 import numpy as np
@@ -166,7 +167,6 @@ class VideoFrameExtractorNode:
         logging.info("Video Frame Extractor: frame %d/%d from %s",
                      idx + 1, len(tensors), os.path.basename(video_path))
         return (tensors[idx].unsqueeze(0),)
-
 
 NODE_CLASS_MAPPINGS = {"VideoFrameExtractorNode": VideoFrameExtractorNode}
 NODE_DISPLAY_NAME_MAPPINGS = {"VideoFrameExtractorNode": "Aiorbust Video Frame Extractor"}

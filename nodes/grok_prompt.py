@@ -9,6 +9,8 @@ kept consistent so both nodes talk to the API the same way.
 
 import base64
 import io
+import json
+import os
 import logging
 
 import numpy as np
@@ -32,10 +34,145 @@ _GROK_MODELS = [
 
 _XAI_URL = "https://api.x.ai/v1/chat/completions"
 
+# Taille exacte du tenseur que l'Aiorbust Image Batch Loader renvoie quand sa
+# liste est vide : torch.zeros((1, 64, 64, 3)). Ce n'est pas une image, c'est un
+# bouchon — mais rien dans le type IMAGE de ComfyUI ne permet de le distinguer
+# d'une vraie image en aval.
+_PLACEHOLDER_SIDE = 64
+
+
+def _is_placeholder_frame(frame) -> bool:
+    """True si la frame est le carre noir 64x64 d'un Batch Loader vide.
+
+    Envoyer ce bouchon a un modele vision coute des tokens image pour faire
+    analyser du vide, et brouille la reponse : le modele decrit consciencieusement
+    un rectangle noir. Le test porte sur la taille ET le contenu — une vraie image
+    64x64 entierement noire serait aussi refusee, mais elle n'a de toute facon
+    aucune valeur comme reference visuelle.
+    """
+    try:
+        h, w = int(frame.shape[0]), int(frame.shape[1])
+        if h != _PLACEHOLDER_SIDE or w != _PLACEHOLDER_SIDE:
+            return False
+        # Tolerance sous 1/255 : le tenseur est en float, une valeur strictement
+        # nulle n'est pas garantie apres un passage par un autre node.
+        return float(frame.max()) < (1.0 / 255.0)
+    except Exception:
+        return False
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Presets — meme mecanique que NanoBananaAIO : un JSON a cote du node, deux
+# routes REST, et le JS qui appelle. La cle API n'est JAMAIS sauvegardee.
+# ─────────────────────────────────────────────────────────────────────────────
+_PRESETS_FILE = os.path.join(os.path.dirname(__file__), "grok_prompt_presets.json")
+
+_PRESET_KEYS = [
+    "prompt",
+    "trigger_word",
+    "model",
+    "temperature",
+    "max_tokens",
+]
+
+
+def _load_presets() -> dict:
+    if not os.path.isfile(_PRESETS_FILE):
+        return {}
+    try:
+        with open(_PRESETS_FILE, "r", encoding="utf-8") as f:
+            return {int(k): v for k, v in json.load(f).items()}
+    except Exception as e:
+        print(f"⚠️  [Grok Presets] Unable to load: {e}")
+        return {}
+
+
+def _save_presets(presets: dict) -> bool:
+    try:
+        with open(_PRESETS_FILE, "w", encoding="utf-8") as f:
+            json.dump({str(k): v for k, v in presets.items()}, f,
+                      indent=2, ensure_ascii=False)
+        print(f"✅ [Grok Presets] Saved → {_PRESETS_FILE}")
+        return True
+    except Exception as e:
+        print(f"❌ [Grok Presets] Write failed: {e}")
+        return False
+
+
+try:
+    from server import PromptServer
+    from aiohttp import web
+
+    # Garde contre le double enregistrement : une copie de sauvegarde du .py
+    # dans le meme dossier ferait lever aiohttp sur une route deja prise.
+    if not getattr(PromptServer.instance, "_grok_prompt_routes_registered", False):
+        PromptServer.instance._grok_prompt_routes_registered = True
+
+        @PromptServer.instance.routes.post("/grok_prompt/save_preset")
+        async def _grok_save_preset(request):
+            try:
+                body = await request.json()
+                slot = int(body.get("slot", 1))
+                if slot < 1 or slot > 5:
+                    return web.json_response(
+                        {"success": False, "error": "Invalid slot (1-5)"}, status=400)
+                filtered = {k: v for k, v in (body.get("params") or {}).items()
+                            if k in _PRESET_KEYS}
+                presets = _load_presets()
+                presets[slot] = filtered
+                if not _save_presets(presets):
+                    return web.json_response(
+                        {"success": False, "error": "File write failed"}, status=500)
+                print(f"💾 [Grok Presets] Slot {slot} saved")
+                return web.json_response({"success": True, "slot": slot,
+                                          "params": filtered})
+            except Exception as e:
+                return web.json_response({"success": False, "error": str(e)}, status=500)
+
+        @PromptServer.instance.routes.get("/grok_prompt/load_presets")
+        async def _grok_load_presets(request):
+            try:
+                return web.json_response({
+                    "success": True,
+                    "presets": {str(k): v for k, v in _load_presets().items()},
+                })
+            except Exception as e:
+                return web.json_response({"success": False, "error": str(e)}, status=500)
+except Exception:
+    logging.warning("Aiorbust Grok: could not register preset routes (server not available)")
+
+
+def _apply_trigger(text: str, trigger: str) -> str:
+    """Replace the TRIGGER placeholder with the user's trigger word.
+
+    Same convention as the Dataset Creator's CAPTIONS files, so a prompt written
+    for one can be pasted into the other. Case-sensitive on purpose:
+    a prompt that legitimately contains the word "trigger" in a sentence must
+    not be mangled.
+    """
+    if not text:
+        return text
+    return text.replace("TRIGGER", trigger) if trigger else text
+
 
 class GrokPromptNode:
 
     _cached_api_key = ""
+
+    # Nombre d'appels API depuis le demarrage de ComfyUI.
+    #
+    # Ajoute pour une raison precise : cette fonction ne fait qu'UN POST par
+    # execution, donc si la facture xAI montre N requetes pour ce qui semble
+    # etre un seul run, c'est que ComfyUI a appele generate() N fois. Le
+    # compteur rend ca visible dans la console au lieu de le laisser deviner
+    # depuis les logs de facturation, des heures plus tard.
+    #
+    # Volontairement PAS de IS_CHANGED ici, contrairement a GeminiPromptNode qui
+    # renvoie float("nan") : NaN != NaN, donc ce node-la se re-execute a CHAQUE
+    # queue meme a entrees identiques. Sur une API facturee au token, c'est un
+    # gouffre. Sans IS_CHANGED, ComfyUI hache les entrees et reutilise le cache
+    # tant que rien ne change — ce qui est le comportement voulu ici.
+    _api_call_count = 0
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -74,6 +211,15 @@ class GrokPromptNode:
                     "step": 64,
                     "tooltip": "Maximum number of tokens in the response.",
                 }),
+                # Ajoute EN DERNIER volontairement : ComfyUI serialise les
+                # valeurs par position, donc l'inserer plus haut decalerait tous
+                # les widgets des workflows deja enregistres.
+                "trigger_word": ("STRING", {
+                    "default": "",
+                    "multiline": False,
+                    "tooltip": "Replaces every occurrence of TRIGGER in the prompt. "
+                               "Left empty, TRIGGER is sent as-is.",
+                }),
             },
         }
 
@@ -95,6 +241,7 @@ class GrokPromptNode:
         api_key="",
         temperature=0.7,
         max_tokens=1024,
+        trigger_word="",
     ):
         # Cache key across executions
         key = api_key.strip()
@@ -108,16 +255,28 @@ class GrokPromptNode:
                 "[Aiorbust Grok] API key is required. Get yours at https://console.x.ai"
             )
 
+        trigger = (trigger_word or "").strip()
+        prompt = _apply_trigger(prompt or "", trigger)
+
         if not prompt.strip():
             raise RuntimeError("[Aiorbust Grok] Prompt cannot be empty.")
+
+        if not trigger and "TRIGGER" in prompt:
+            print("⚠️  [Aiorbust Grok] The prompt contains TRIGGER but trigger_word is empty — "
+                  "the placeholder is sent to the model as the literal word.")
 
         # Build the user message content — a list of image_url parts (one per
         # image in the batch) followed by the text part, same shape as
         # GeminiPromptNode._call_grok() in gemini_prompt.py.
         user_content = []
+        _sent, _skipped = 0, 0
         if image is not None:
             for i in range(image.shape[0]):
-                img_np = (255.0 * image[i].cpu().numpy()).clip(0, 255).astype(np.uint8)
+                frame = image[i]
+                if _is_placeholder_frame(frame):
+                    _skipped += 1
+                    continue
+                img_np = (255.0 * frame.cpu().numpy()).clip(0, 255).astype(np.uint8)
                 pil = Image.fromarray(img_np)
                 buf = io.BytesIO()
                 pil.save(buf, format="PNG")
@@ -126,6 +285,19 @@ class GrokPromptNode:
                     "type": "image_url",
                     "image_url": {"url": f"data:image/png;base64,{b64}"},
                 })
+                _sent += 1
+
+        if _skipped:
+            print(
+                f"⚠️  [Aiorbust Grok] {_skipped} image(s) placeholder ignoree(s) "
+                f"(64x64 noire — Batch Loader vide). Vision non facturee pour rien."
+            )
+        if _skipped and _sent == 0:
+            print(
+                "ℹ️  [Aiorbust Grok] Aucune image reelle → requete texte seule. "
+                "Un modele vision n'est pas necessaire ici."
+            )
+
         user_content.append({"type": "text", "text": prompt.strip()})
 
         messages = [{"role": "user", "content": user_content}]
@@ -141,15 +313,50 @@ class GrokPromptNode:
             "Content-Type": "application/json",
         }
 
+        GrokPromptNode._api_call_count += 1
+        # _sent, pas image.shape[0] : c'est le nombre d'images REELLEMENT dans le
+        # payload. Compter le tenseur d'entree afficherait "images=1" alors qu'un
+        # placeholder vient d'etre ecarte — exactement le genre de log qui fait
+        # chercher une facture vision inexistante.
+        print(
+            f"🛰️  [Aiorbust Grok] API CALL #{GrokPromptNode._api_call_count} "
+            f"(depuis le demarrage de ComfyUI) — model={model} | images envoyees={_sent} | "
+            f"temp={temperature:.2f} | max_tokens={max_tokens}"
+            + (f" | trigger='{trigger}'" if trigger else "")
+        )
         logging.info(
-            "[Aiorbust Grok] Calling %s (model=%s, image=%s, temp=%.2f, max_tokens=%d)",
-            _XAI_URL, model, "yes" if image is not None else "no", temperature, max_tokens,
+            "[Aiorbust Grok] Calling %s (model=%s, images=%d, temp=%.2f, max_tokens=%d)",
+            _XAI_URL, model, _sent, temperature, max_tokens,
         )
 
         try:
             resp = requests.post(_XAI_URL, json=payload, headers=headers, timeout=180)
+            # resp.history contient les reponses intermediaires suivies par
+            # requests. Non vide = la requete a ete rejouee apres une
+            # redirection, et le corps a donc ete envoye plus d'une fois — ce qui
+            # se verrait comme plusieurs requetes cote fournisseur pour un seul
+            # appel du node. C'est la seule facon depuis ici de distinguer
+            # "le node a appele 2 fois" de "un appel a produit 2 requetes HTTP".
+            if resp.history:
+                _hops = " → ".join(f"{r.status_code} {r.url}" for r in resp.history)
+                print(
+                    f"⚠️  [Aiorbust Grok] {len(resp.history)} redirection(s) suivie(s) : {_hops}\n"
+                    f"   Le corps de la requete a ete renvoye a chaque saut."
+                )
             resp.raise_for_status()
             data = resp.json()
+
+            # Ce que le fournisseur dit avoir consomme, a comparer directement
+            # avec son dashboard. Un ecart entre ces chiffres et la facture
+            # signifie que le surplus vient d'ailleurs que de ce node.
+            _u = data.get("usage") or {}
+            if _u:
+                print(
+                    f"📊 [Aiorbust Grok] usage rapporte par xAI — "
+                    f"prompt={_u.get('prompt_tokens', '?')} | "
+                    f"completion={_u.get('completion_tokens', '?')} | "
+                    f"total={_u.get('total_tokens', '?')}"
+                )
         except requests.exceptions.HTTPError as e:
             msg = "[Aiorbust Grok] API error " + str(e.response.status_code)
             try:
@@ -172,7 +379,6 @@ class GrokPromptNode:
 
         logging.info("[Aiorbust Grok] Done - %d chars returned.", len(text))
         return (text,)
-
 
 NODE_CLASS_MAPPINGS = {
     "GrokPromptNode": GrokPromptNode,

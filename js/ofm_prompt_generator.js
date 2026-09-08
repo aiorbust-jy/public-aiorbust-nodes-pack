@@ -16,15 +16,9 @@ async function loadPrompts() {
 loadPrompts();
 
 app.registerExtension({
-    name: "publicAiorbust.PromptGenerator",
+    name: "aiorbust.OFMPromptGenerator",
     nodeCreated(node) {
         if (node.comfyClass !== "GeminiPromptNode") return;
-
-        // The main Aiorbust pack ships the same script. When both packs are
-        // installed, both copies get a shot at every node — decorating twice
-        // would stack two flame overlays and two onDrawForeground chains.
-        if (node.__aiorbustPromptGeneratorThemed) return;
-        node.__aiorbustPromptGeneratorThemed = true;
 
         // --- Fire theme styling (matching Aiorbust Prompt Selector) ---
         node.color = "#3d2008";

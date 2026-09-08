@@ -108,6 +108,61 @@ _KLING_WS_URL_MAP = {
         "1080p": "kwaivgi/kling-v3.0-pro/motion-control",   # Pro
     },
 }
+# ── Wan 3.0 (Alibaba) — WaveSpeed et Kie uniquement ──────────────────────────
+# Volontairement PAS sur Fal : demande explicite, et un troisieme fournisseur
+# signifierait un troisieme jeu de noms de champs a garder en phase.
+#
+# Les deux plateformes exposent le meme modele sous deux formes differentes :
+#
+#   WaveSpeed  un endpoint par mode. image-to-video quand une image est
+#              fournie, text-to-video sinon. Le champ image s'appelle `image`,
+#              la derniere frame `last_image`, la resolution est en minuscules.
+#   Kie        UN seul model id, et c'est la presence des champs qui decide du
+#              mode - meme logique que leur Seedance. Resolution en MAJUSCULES
+#              ("720P"), et le garde-fou s'appelle nsfw_checker, pas
+#              enable_safety_checker.
+#
+# Duree : l'API accepte 2-30 s. On plafonne a 15 s pour l'instant, sur demande.
+# Seul le modele standard est expose. Prime existe (wan/3-0-video-prime cote
+# Kie, alibaba/wan-3.0-prime cote WaveSpeed) et s'ajoutera en une ligne dans
+# chacune des deux tables ci-dessous le jour ou il sera voulu.
+_WAN3_MODEL  = "Wan 3.0"
+_WAN3_MODELS = {_WAN3_MODEL}
+
+_WAN3_DURATION_MIN = 2
+_WAN3_DURATION_MAX = 15          # plafond volontaire ; l'API monte a 30
+_WAN3_RESOLUTIONS  = ("480p", "720p", "1080p")
+
+_WAN3_WS_SLUG   = {_WAN3_MODEL: "alibaba/wan-3.0"}
+_WAN3_KIE_MODEL = {_WAN3_MODEL: "wan/3-0-video"}
+
+
+def _wan3_duration(duration) -> int:
+    """Clamp to the range this pack allows, not the range the API allows."""
+    try:
+        d = int(round(float(duration)))
+    except (TypeError, ValueError):
+        d = 5
+    return max(_WAN3_DURATION_MIN, min(_WAN3_DURATION_MAX, d))
+
+
+def _wan3_resolution(resolution) -> str:
+    """Snap to 480p / 720p / 1080p.
+
+    Wan 3.0 has no 4K tier, and the node's resolution widget offers one for
+    Kling. Sending "4K" would be refused by the API for a reason the message
+    would not make obvious, so it is folded down here and said out loud.
+    """
+    r = str(resolution or "720p").lower()
+    if r in _WAN3_RESOLUTIONS:
+        return r
+    print(f"⚠️  [Wan 3.0] resolution {resolution!r} is not offered by this model "
+          f"({', '.join(_WAN3_RESOLUTIONS)}) — using 1080p, the closest tier below it."
+          if r == "4k" else
+          f"⚠️  [Wan 3.0] unknown resolution {resolution!r} — using 720p.")
+    return "1080p" if r == "4k" else "720p"
+
+
 _SEEDANCE20_MODEL         = "Seedance 2.0"
 _SEEDANCE25_MODEL         = "Seedance 2.5"
 _SEEDANCE_MODELS          = {_SEEDANCE20_MODEL, _SEEDANCE25_MODEL}
@@ -1017,7 +1072,18 @@ def _reconcile_batch_shapes(generated_images, tag="Batch"):
 # ─────────────────────────────────────────────────────────────────────────────
 class NanoBananaAIO:
     _vertex_rotation_offset  = 0
-    _failed_upload_services: set = set()  # services that failed this session  # rotation round-robin entre les projets Vertex
+    # Services d'upload en echec, avec l'HORODATAGE de l'echec plutot qu'un
+    # simple ensemble.
+    #
+    # Pourquoi : c'etait un set permanent pour la session. Un seul echec reseau
+    # sur le CDN WaveSpeed - un timeout, une coupure de deux secondes - et il
+    # etait ecarte pour des heures. Tout basculait alors sur catbox, que les
+    # serveurs de WaveSpeed n'arrivent souvent pas a joindre (WAF, indisponibilite).
+    # Resultat : "Could not download the input from files.catbox.moe" alors que
+    # la cle WaveSpeed etait bien renseignee, et une degradation silencieuse
+    # jusqu'au prochain redemarrage de ComfyUI.
+    _failed_upload_services: dict = {}          # {service: timestamp de l'echec}
+    _UPLOAD_RETRY_AFTER = 120.0                 # secondes avant de reessayer
 
     def __init__(self):
         self._preview_warning_shown = False
@@ -1032,6 +1098,7 @@ class NanoBananaAIO:
             list(_MODEL_MAP.keys())
             + list(_VIDEO_MODEL_MAP.keys())
             + sorted(_KLING_MODELS)
+            + sorted(_WAN3_MODELS)
             + sorted(_SEEDANCE_MODELS)
             + sorted(_OMNI_MODELS)
         )
@@ -4688,7 +4755,15 @@ class NanoBananaAIO:
             upload_filename = f"kie_input_{idx}.jpg"
             upload_mimetype = "image/jpeg"
 
-        _skip = NanoBananaAIO._failed_upload_services
+        # Vue instantanee des services encore en quarantaine. Ceux dont l'echec
+        # date de plus de _UPLOAD_RETRY_AFTER sont reessayes : un incident reseau
+        # passager ne doit pas condamner le meilleur hebergeur pour la session.
+        _now = time.time()
+        _failed = NanoBananaAIO._failed_upload_services
+        for _svc in [k for k, t in _failed.items() if _now - t > NanoBananaAIO._UPLOAD_RETRY_AFTER]:
+            del _failed[_svc]
+            print(f"🔄 [Upload] {_svc} out of quarantine — retrying it.")
+        _skip = set(_failed)
 
         # --- Priorité 0 : Kie file-stream-upload (recommandé par Kie support) ---
         # Avantage : l'image est directement chez Kie, pas de fetch externe.
@@ -4732,7 +4807,7 @@ class NanoBananaAIO:
             # None here means WaveSpeed is out for this run — skip it for the rest
             # of the batch instead of paying two failed round trips per image.
             print("⚠️  [Upload] WaveSpeed unavailable — skipping it for this session.")
-            _skip.add("wavespeed")
+            NanoBananaAIO._failed_upload_services["wavespeed"] = time.time()
 
         # --- Fallback 1 : catbox.moe ---
         if "catbox" not in _skip:
@@ -4749,10 +4824,10 @@ class NanoBananaAIO:
                 if url.startswith("https://"):
                     print(f"✅ [Upload] Image {idx} → catbox.moe : {url}")
                     return url
-                _skip.add("catbox")
+                NanoBananaAIO._failed_upload_services["catbox"] = time.time()
             except Exception as e:
                 print(f"⚠️  [Upload] catbox.moe failed ({e}) — skipping for this session.")
-                _skip.add("catbox")
+                NanoBananaAIO._failed_upload_services["catbox"] = time.time()
 
         # --- Fallback 2 : litterbox.catbox.moe ---
         if "litterbox" not in _skip:
@@ -4769,10 +4844,10 @@ class NanoBananaAIO:
                 if url.startswith("https://"):
                     print(f"✅ [Upload] Image {idx} → litterbox : {url}")
                     return url
-                _skip.add("litterbox")
+                NanoBananaAIO._failed_upload_services["litterbox"] = time.time()
             except Exception as e:
                 print(f"⚠️  [Upload] litterbox failed ({e}) — skipping for this session.")
-                _skip.add("litterbox")
+                NanoBananaAIO._failed_upload_services["litterbox"] = time.time()
 
         # --- Fallback 3 : 0x0.st ---
         if "0x0" not in _skip:
@@ -4788,10 +4863,10 @@ class NanoBananaAIO:
                 if url.startswith("https://"):
                     print(f"✅ [Upload] Image {idx} → 0x0.st : {url}")
                     return url
-                _skip.add("0x0")
+                NanoBananaAIO._failed_upload_services["0x0"] = time.time()
             except Exception as e:
                 print(f"⚠️  [Upload] 0x0.st failed ({e}) — skipping for this session.")
-                _skip.add("0x0")
+                NanoBananaAIO._failed_upload_services["0x0"] = time.time()
 
         # --- Fallback 4 : telegra.ph ---
         if "telegraph" not in _skip:
@@ -4809,10 +4884,10 @@ class NanoBananaAIO:
                     url = f"https://telegra.ph{tph_path}"
                     print(f"✅ [Upload] Image {idx} → telegra.ph : {url}")
                     return url
-                _skip.add("telegraph")
+                NanoBananaAIO._failed_upload_services["telegraph"] = time.time()
             except Exception as e:
                 print(f"⚠️  [Upload] telegra.ph failed ({e}) — skipping for this session.")
-                _skip.add("telegraph")
+                NanoBananaAIO._failed_upload_services["telegraph"] = time.time()
 
         print(f"❌ [Upload] All upload services failed for image {idx}.")
         return None
@@ -5398,7 +5473,8 @@ class NanoBananaAIO:
             video_input_mode = seedance_mode
 
         all_known = (
-            set(_VIDEO_MODEL_MAP.keys()) | _KLING_MODELS | _SEEDANCE_MODELS | _OMNI_MODELS
+            set(_VIDEO_MODEL_MAP.keys()) | _KLING_MODELS | _SEEDANCE_MODELS
+            | _OMNI_MODELS | _WAN3_MODELS
         )
         if model not in all_known:
             return self._handle_error(
@@ -5538,6 +5614,43 @@ class NanoBananaAIO:
             )
 
         # ── Kling — WaveSpeed (Kling 3.0, 2.6, Motion Control) ───
+        # ── Wan 3.0 — WaveSpeed ou Kie ────────────────────────────
+        if model in _WAN3_MODELS:
+            if provider == "WAVESPEED":
+                if not wavespeed_api_key:
+                    return self._handle_error(
+                        "❌ [Video] wavespeed_api_key missing pour Wan 3.0.")
+                return self._generate_wan3_wavespeed(
+                    prompt         = prompt,
+                    aspect_ratio   = aspect_ratio,
+                    duration       = duration,
+                    resolution     = video_resolution,
+                    generate_audio = generate_audio,
+                    ws_api_key     = wavespeed_api_key,
+                    image_tensors  = image_tensors or [],
+                    disable_safety = disable_safety,
+                )
+            if provider == "KIE":
+                if not kie_api_key:
+                    return self._handle_error(
+                        "❌ [Video] kie_api_key missing pour Wan 3.0.")
+                return self._generate_wan3_kie(
+                    prompt         = prompt,
+                    aspect_ratio   = aspect_ratio,
+                    duration       = duration,
+                    resolution     = video_resolution,
+                    generate_audio = generate_audio,
+                    kie_api_key    = kie_api_key,
+                    ws_api_key     = wavespeed_api_key,
+                    image_tensors  = image_tensors or [],
+                    disable_safety = disable_safety,
+                )
+            return self._handle_error(
+                f"❌ [Video] {model} n'est disponible que via WAVESPEED ou KIE "
+                f"(provider actuel : {provider}).\n"
+                f"→ Fal n'est volontairement pas cable pour ce modele."
+            )
+
         if model in _KLING_MODELS:
             if provider != "WAVESPEED":
                 return self._handle_error(
@@ -6422,6 +6535,251 @@ class NanoBananaAIO:
             return self._handle_error(f"❌ {tag} Download error : {e}")
 
         return self._finalize_video(video_bytes, tag, slug, "16:9", dur)
+
+    # ── Wan 3.0 ──────────────────────────────────────────────────────────────
+
+    def _wan3_submit_and_poll(self, url, payload, headers, tag, ratio, dur,
+                              poll_url_tpl=None, poll_headers=None,
+                              cancel_url_tpl=None, kie=False):
+        """Submit, poll, download, finalize — for both Wan 3.0 providers.
+
+        The two platforms differ only in where the task id sits and what the
+        status field is called. Writing the loop twice would mean two places to
+        fix the next time a timeout or a status name changes, so the difference
+        is a flag and everything else is shared.
+        """
+        try:
+            resp = requests.post(url, json=payload, headers=headers, timeout=60)
+            resp.raise_for_status()
+            data = resp.json()
+        except requests.RequestException as e:
+            body = ""
+            if getattr(e, "response", None) is not None:
+                body = f"\n   server said: {e.response.text[:300]}"
+            return self._handle_error(f"❌ {tag} Submission error: {e}{body}")
+
+        if kie:
+            if data.get("code") != 200:
+                return self._handle_error(f"❌ {tag} Submission refused: {data.get('msg')}")
+            task_id = (data.get("data") or {}).get("taskId")
+        else:
+            task_id = (data.get("data") or {}).get("id") or data.get("id")
+        if not task_id:
+            return self._handle_error(f"❌ {tag} No task id in the response: {data}")
+        print(f"🔖 {tag} Task ID : {task_id}")
+
+        timeout = KIE_TIMEOUT_S if kie else _VIDEO_TIMEOUT_S
+        delay   = KIE_POLL_DELAY if kie else _VIDEO_POLL_DELAY
+        elapsed, video_url = 0, None
+        print(f"⏳ {tag} Waiting for result (timeout: {timeout}s)...")
+        while elapsed < timeout:
+            time.sleep(delay)
+            elapsed += delay
+            try:
+                if kie:
+                    pr = requests.get(KIE_POLL_URL, params={"taskId": task_id},
+                                      headers=poll_headers, timeout=15)
+                else:
+                    pr = requests.get(poll_url_tpl.format(task_id=task_id),
+                                      headers=poll_headers, timeout=15)
+                pr.raise_for_status()
+                pd = pr.json()
+            except requests.RequestException as e:
+                print(f"⚠️  {tag} Polling error ({elapsed}s) : {e}")
+                continue
+
+            if kie:
+                if pd.get("code") != 200:
+                    return self._handle_error(f"❌ {tag} Poll error: {pd.get('msg')}")
+                d = pd.get("data") or {}
+                state = d.get("state", "")
+                if state == "success":
+                    res = d.get("resultJson") or d.get("result") or {}
+                    if isinstance(res, str):
+                        try:
+                            res = json.loads(res)
+                        except Exception:
+                            res = {}
+                    urls = (res.get("resultUrls") or res.get("videoUrls")
+                            or ([res.get("videoUrl")] if res.get("videoUrl") else []))
+                    if not urls:
+                        return self._handle_error(
+                            f"❌ {tag} Completed but no video URL: {d}")
+                    video_url = urls[0]
+                    print(f"✅ {tag} Video ready! ({elapsed}s)")
+                    break
+                if state in ("fail", "failed", "error"):
+                    return self._handle_error(f"❌ {tag} Failed: {d.get('failMsg', '?')}")
+                print(f"   {tag} [{elapsed}s/{timeout}s] state={state!r}...")
+            else:
+                d = pd.get("data") or {}
+                status = d.get("status", "")
+                if status == "completed":
+                    outs = d.get("outputs") or []
+                    if not outs:
+                        return self._handle_error(f"❌ {tag} Completed but no output.")
+                    video_url = outs[0]
+                    print(f"✅ {tag} Video ready! ({elapsed}s)")
+                    break
+                if status == "failed":
+                    return self._handle_error(f"❌ {tag} Failed: {d.get('error', '?')}")
+                print(f"   {tag} [{elapsed}s/{timeout}s] status={status!r}...")
+        else:
+            if cancel_url_tpl:
+                # Un job abandonne cote client continue d'etre facture cote
+                # serveur s'il n'est pas annule.
+                try:
+                    requests.delete(cancel_url_tpl.format(task_id=task_id),
+                                    headers=poll_headers, timeout=10)
+                except Exception:
+                    pass
+            return self._handle_error(f"❌ {tag} Timeout after {timeout}s.")
+
+        try:
+            dl = requests.get(video_url, timeout=180)
+            dl.raise_for_status()
+            print(f"✅ {tag} Downloaded ({len(dl.content)} bytes).")
+        except Exception as e:
+            return self._handle_error(f"❌ {tag} Download error: {e}")
+
+        return self._finalize_video(dl.content, tag, "wan-3.0", ratio, dur)
+
+    def _generate_wan3_wavespeed(
+        self,
+        prompt         = "",
+        aspect_ratio   = "16:9",
+        duration       = 5,
+        resolution     = "720p",
+        generate_audio = True,
+        ws_api_key     = "",
+        image_tensors  = None,
+        disable_safety = False,
+    ):
+        """Wan 3.0 on WaveSpeed. One endpoint per mode, chosen by the inputs.
+
+        image-to-video and text-to-video are two different URLs here, unlike Kie
+        where a single model switches on which fields are present. Posting an
+        image to the text endpoint is not an error the API reports usefully - it
+        simply ignores it - so the URL is picked from what was actually supplied.
+        """
+        res  = _wan3_resolution(resolution)
+        dur  = _wan3_duration(duration)
+        imgs = list(image_tensors or [])
+
+        first_url = last_url = None
+        if imgs:
+            first_url = self._tensor_to_public_url(imgs[0], idx=1, ws_api_key=ws_api_key)
+            if first_url is None:
+                return self._handle_error(
+                    "❌ [WaveSpeed Wan 3.0] the first frame could not be uploaded — "
+                    "no host accepted it.\n"
+                    "→ Check wavespeed_api_key, or retry: a transient CDN failure now "
+                    "clears after a short cooldown instead of lasting the session."
+                )
+            if len(imgs) > 1:
+                last_url = self._tensor_to_public_url(imgs[1], idx=2, ws_api_key=ws_api_key)
+
+        mode = "image-to-video" if first_url else "text-to-video"
+        tag  = f"[WaveSpeed Wan 3.0 {res} {'I2V' if first_url else 'T2V'}]"
+        url  = f"{WAVESPEED_BASE_URL}/{_WAN3_WS_SLUG[_WAN3_MODEL]}/{mode}"
+
+        payload = {
+            "prompt":       prompt,
+            "resolution":   res,
+            "duration":     dur,
+            "enable_audio": bool(generate_audio),
+            "enable_safety_checker": not disable_safety,
+        }
+        if aspect_ratio:
+            payload["aspect_ratio"] = aspect_ratio
+        if first_url:
+            payload["image"] = first_url
+        if last_url:
+            payload["last_image"] = last_url
+
+        print(f"🎬 {tag} duration={dur}s | ratio={aspect_ratio} | audio={generate_audio} "
+              f"| safety={'off' if disable_safety else 'on'}"
+              + (f" | last frame: yes" if last_url else ""))
+        if int(duration) != dur:
+            print(f"   ↳ duration clamped {int(duration)}s → {dur}s "
+                  f"(this pack caps Wan 3.0 at {_WAN3_DURATION_MAX}s; the API allows 30).")
+
+        return self._wan3_submit_and_poll(
+            url, payload,
+            headers={"Authorization": f"Bearer {ws_api_key}",
+                     "Content-Type": "application/json"},
+            tag=tag, ratio=aspect_ratio or "16:9", dur=dur,
+            poll_url_tpl=WAVESPEED_POLL_URL,
+            poll_headers={"Authorization": f"Bearer {ws_api_key}"},
+            cancel_url_tpl=WAVESPEED_CANCEL_URL,
+        )
+
+    def _generate_wan3_kie(
+        self,
+        prompt         = "",
+        aspect_ratio   = "16:9",
+        duration       = 5,
+        resolution     = "720p",
+        generate_audio = True,
+        kie_api_key    = "",
+        ws_api_key     = "",
+        image_tensors  = None,
+        disable_safety = False,
+    ):
+        """Wan 3.0 on Kie. One model id; the fields present decide the mode.
+
+        Two differences from WaveSpeed that are easy to get wrong:
+          - the resolution is UPPER case ("720P"). Lower case is rejected.
+          - the safety flag is `nsfw_checker`, and unlike Kie's Seedance this
+            model really does document it, so disable_safety is honoured here
+            instead of being silently dropped.
+        """
+        res = _wan3_resolution(resolution).upper()      # 720p -> 720P
+        dur = _wan3_duration(duration)
+        tag = f"[Kie.ai Wan 3.0 {res}]"
+
+        imgs = list(image_tensors or [])
+        first_url = last_url = None
+        if imgs:
+            first_url = self._tensor_to_public_url(imgs[0], idx=1, ws_api_key=ws_api_key,
+                                                   kie_api_key=kie_api_key)
+            if first_url is None:
+                return self._handle_error(
+                    "❌ [Kie.ai Wan 3.0] the first frame could not be uploaded."
+                )
+            if len(imgs) > 1:
+                last_url = self._tensor_to_public_url(imgs[1], idx=2, ws_api_key=ws_api_key,
+                                                     kie_api_key=kie_api_key)
+
+        inp = {
+            "prompt":       prompt,
+            "resolution":   res,
+            "duration":     dur,
+            "audio":        bool(generate_audio),
+            "nsfw_checker": not disable_safety,
+        }
+        if aspect_ratio:
+            inp["aspect_ratio"] = aspect_ratio
+        if first_url:
+            inp["first_frame_url"] = first_url
+        if last_url:
+            inp["last_frame_url"] = last_url
+
+        print(f"🎬 {tag} duration={dur}s | ratio={aspect_ratio} | audio={generate_audio} "
+              f"| nsfw_checker={'off' if disable_safety else 'on'}")
+        if int(duration) != dur:
+            print(f"   ↳ duration clamped {int(duration)}s → {dur}s "
+                  f"(this pack caps Wan 3.0 at {_WAN3_DURATION_MAX}s; the API allows 30).")
+
+        return self._wan3_submit_and_poll(
+            KIE_CREATE_URL,
+            {"model": _WAN3_KIE_MODEL[_WAN3_MODEL], "input": inp},
+            headers={"Authorization": f"Bearer {kie_api_key}",
+                     "Content-Type": "application/json"},
+            tag=tag, ratio=aspect_ratio or "16:9", dur=dur,
+            poll_url_tpl=None, poll_headers={"Authorization": f"Bearer {kie_api_key}"},
+            kie=True,
+        )
 
     def _prepare_omni_inputs(self, mode, image_tensors, video_reference, audio_reference):
         """Validate an Omni Flash input combination.

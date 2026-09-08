@@ -1,12 +1,7 @@
-# -*- coding: utf-8 -*-
 """
-ComfyUI node - Aiorbust Prompt Generator.
-Uses Gemini (AI Studio or Vertex AI) or Grok to analyze images and generate
-structured JSON prompts, or allows custom freeform prompt generation.
-
-Only `requests` is needed for the Gemini and Grok providers. The Vertex
-provider additionally needs `google-genai` + `google-auth`, imported lazily
-inside _call_vertex() so the node still loads without them.
+ComfyUI node — OFM Prompt Generator.
+Uses Gemini LLM to analyze images and generate structured JSON prompts,
+or allows custom freeform prompt generation.
 """
 
 import io
@@ -605,7 +600,13 @@ def _ensure_google_auth() -> bool:
 
 
 def _load_vertex_json_folder(folder_path: str) -> list:
-    """Scans a folder and returns the sorted list of .json files (service accounts)."""
+    """Scans a folder and returns the sorted list of .json files (service accounts).
+
+    Duplicated from nodes/nano_banana_aio.py rather than imported: that module
+    pulls in torch and the whole AIO node, and this file is imported before it in
+    __init__.py — importing across would reorder the pack's startup for fifteen
+    lines that depend on nothing but `os`.
+    """
     folder_path = folder_path.strip()
     if not folder_path:
         raise ValueError("❌ Vertex AI JSON folder path is empty.")
@@ -713,8 +714,9 @@ class GeminiPromptNode:
 
     # Which service account to use next. A folder holds one JSON per GCP project,
     # and Vertex quota is per project — advancing on every call spreads the load
-    # instead of hammering the first file until it 429s. Advanced per call rather
-    # than per batch slot, because this node makes exactly one request per run.
+    # instead of hammering the first file until it 429s. Same idea as
+    # NanoBananaAIO._vertex_rotation_offset, applied per call rather than per batch
+    # slot, because this node makes exactly one request per run.
     _vertex_rotation_offset = 0
 
     @classmethod
@@ -782,7 +784,7 @@ class GeminiPromptNode:
     RETURN_NAMES = ("prompt",)
     FUNCTION = "generate"
     OUTPUT_NODE = True
-    CATEGORY = "Aiorbust/Prompt"
+    CATEGORY = "utils"
 
     @classmethod
     def IS_CHANGED(cls, **kwargs):
@@ -993,6 +995,8 @@ class GeminiPromptNode:
         # global endpoint and are simply absent from most regional ones \u2014 asking
         # us-central1 for gemini-3.6-flash returns 404 NOT_FOUND, which reads like
         # a permissions problem but is really a routing one.
+        # nodes/nano_banana_aio.py::_make_vertex_client_from_json does the same,
+        # for the same reason.
         _VERTEX_LOCATION = "global"
         print(f"\U0001f310 [Vertex AI] Connexion \u2014 projet={project_id} | "
               f"location={_VERTEX_LOCATION} | mod\u00e8le={model}")
@@ -1193,7 +1197,6 @@ def _response_summary(data):
         return f"finishReason={reason}"
     except Exception:
         return ""
-
 
 NODE_CLASS_MAPPINGS = {
     "GeminiPromptNode": GeminiPromptNode,

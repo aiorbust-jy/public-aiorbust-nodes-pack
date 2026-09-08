@@ -23,6 +23,16 @@ by the public Aiorbust workflows.
 | `AiorbustLicense` | Aiorbust License | Aiorbust | One key for the whole graph. Drop it anywhere on the canvas and every licensed node finds the key on its own — no wiring. The output is still there if you prefer an explicit link |
 | `AiorbustEyeBBoxDetectorProvider` | Aiorbust HD Ultralytic BBox Loader | Aiorbust/Detailer | Ultralytics BBox loader with forced `imgsz=1280` for small objects (eyes) — see note below |
 | `AiorbustDetailer` | Aiorbust Detailer | Aiorbust/Detailer | FaceDetailer clone with selectable paste-back interpolation, sharpness & color-match — see note below |
+| `AiorbustVideoChainPrepare` / `AiorbustVideoChainCommit` | Aiorbust Video Chain — Prepare / Commit | video | Renders a long video as a chain of segments around your normal graph, without re-plugging anything between runs (has JS UI) |
+| `AiorbustVideoChainSegment` / `AiorbustVideoChainJoin` | Aiorbust Video Chain — Segment / Join | video | The explicit segment/join pair, for chains you would rather wire by hand |
+| `AiorbustSegmentCache` | Aiorbust Segment Cache | Aiorbust | Keeps a finished segment on disk so a later failure in the chain does not throw away the sampling already paid for |
+| `AiorbustRifeVfiBatched` | Aiorbust RIFE VFI (batched) | Aiorbust | RIFE interpolation that streams instead of collecting every frame in a list, so it does not need twice the RAM of its own output. Frames come from `ComfyUI-Frame-Interpolation` |
+| `AiorbustImagesToVideo` | Aiorbust Images to Video (AB_VIDEO) | Aiorbust | Encodes an IMAGE batch into a video; requires `av` |
+| `AiorbustSaveVideoNoMetadata` | Aiorbust Save Video (no metadata) | Aiorbust | Saves a video with the prompt/workflow metadata stripped; requires `av` |
+| `AiorbustImageBlurBatched` | Aiorbust Image Blur (batched) | image/postprocessing | Drop-in ImageBlur for long video batches — ComfyUI's own refuses tensors over 2**31 elements |
+| `AiorbustImageCompositeMaskedBatched` | Aiorbust Image Composite Masked (batched) | image | Masked composite with the same long-batch fix |
+| `AiorbustPromptSaver` / `AiorbustPromptGallery` | Aiorbust Prompt Saver / Prompt Gallery | Aiorbust/Prompt | A small prompt library with thumbnails, stored next to the pack (has JS UI) |
+| `AiorbustResolutionMP` | Aiorbust Resolution (MP) | Aiorbust | Picks width/height from a megapixel budget and aspect ratio, snapped to a multiple the model accepts, with a live preview of what it will actually produce (has JS UI) |
 
 ### Prompt Generator — API keys & providers
 

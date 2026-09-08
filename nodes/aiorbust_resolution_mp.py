@@ -186,5 +186,56 @@ class AiorbustResolutionMP:
         return (width, height, ratio_out)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Live preview
+#
+# The widget preview goes through this route rather than re-deriving the maths
+# in JavaScript. _snap_to_budget searches the grid and weighs two competing
+# errors; a second implementation of that in another language would drift from
+# this one the first time either is touched, and the node would then display a
+# resolution it does not produce - which is precisely the failure this node was
+# written to prevent.
+# ─────────────────────────────────────────────────────────────────────────────
+try:
+    from server import PromptServer
+    from aiohttp import web
+
+    if not getattr(PromptServer.instance, "_aiorbust_res_mp_route", False):
+        PromptServer.instance._aiorbust_res_mp_route = True
+
+        @PromptServer.instance.routes.get("/aiorbust/resolution_mp/preview")
+        async def _res_mp_preview(request):
+            try:
+                q = request.query
+                mp = float(q.get("mp", 1.0))
+                label = q.get("ar", "16:9")
+                mult = int(q.get("mult", 32))
+
+                preset = _ASPECT_PRESETS.get(label)
+                if preset is None:
+                    # "from image (input)" : le ratio vient d'un tenseur que le
+                    # frontend n'a pas. Mieux vaut le dire que d'afficher un
+                    # chiffre invente.
+                    return web.json_response({
+                        "success": True,
+                        "text": "from image — computed at run time",
+                    })
+
+                ar = preset[0] / preset[1]
+                w, h = _snap_to_budget(mp, ar, mult)
+                actual = (w * h) / 1_000_000.0
+                drift = (actual - mp) / mp * 100.0 if mp else 0.0
+                return web.json_response({
+                    "success": True,
+                    "width": w, "height": h,
+                    "mp": round(actual, 3), "drift": round(drift, 1),
+                    "text": f"{w} x {h}  ·  {actual:.3f} MP ({drift:+.1f}%)  ·  {w / h:.4f}",
+                })
+            except Exception as e:
+                return web.json_response({"success": False, "error": str(e)}, status=500)
+except Exception:
+    pass
+
+
 NODE_CLASS_MAPPINGS = {"AiorbustResolutionMP": AiorbustResolutionMP}
 NODE_DISPLAY_NAME_MAPPINGS = {"AiorbustResolutionMP": "Aiorbust Resolution (MP)"}

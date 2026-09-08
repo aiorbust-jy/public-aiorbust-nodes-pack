@@ -1,10 +1,90 @@
 /**
- * Aiorbust Image Batch Loader — Frontend Widget
+ * Aiorbust Image and Video Batch Loader — Frontend Widget
  * Large-icon grid, drag & drop upload, sequential Queue All.
  */
 
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
+
+
+// ── Queue All en paquets ────────────────────────────────────────────────────
+//
+// Le frontend ComfyUI plafonne le nombre de taches ajoutees en un seul clic
+// (100 par defaut en local). Un queuePrompt(0, 420) est donc silencieusement
+// tronque : rien n'echoue, il manque simplement des executions, et on ne s'en
+// apercoit qu'a la fin d'un lot.
+//
+// D'ou l'envoi par paquets, en attendant que la file redescende entre chacun.
+// L'attente sur la file plutot qu'un delai fixe : un rendu peut prendre une
+// seconde ou vingt minutes, et un sleep arbitraire serait faux dans les deux
+// sens.
+const QUEUE_CHUNK = 50;
+const QUEUE_LOW_WATER = 8;      // on renvoie quand il reste moins que ca
+const QUEUE_POLL_MS = 1500;
+
+async function pendingCount() {
+    try {
+        const q = await (await api.fetchApi("/queue")).json();
+        return (q.queue_running?.length || 0) + (q.queue_pending?.length || 0);
+    } catch (e) {
+        // Sans lecture de la file on ne peut plus reguler : on renvoie une
+        // valeur haute pour que l'appelant attende plutot que d'inonder.
+        return QUEUE_CHUNK;
+    }
+}
+
+async function waitUntil(predicate) {
+    while (!(await predicate())) {
+        await new Promise(r => setTimeout(r, QUEUE_POLL_MS));
+    }
+}
+
+async function queueInChunks(total, chunkSize, onProgress) {
+    let sent = 0;
+    while (sent < total) {
+        const batch = Math.min(chunkSize, total - sent);
+        await app.queuePrompt(0, batch);
+        sent += batch;
+        onProgress?.(sent, total);
+        if (sent >= total) break;
+        await waitUntil(async () => (await pendingCount()) <= QUEUE_LOW_WATER);
+    }
+    return sent;
+}
+
+/**
+ * Consume mode: submit a batch, wait for the queue to EMPTY, then submit again.
+ *
+ * The full drain is not caution, it is a requirement. Every queued prompt
+ * carries its own snapshot of batch_data taken at submission time, and each run
+ * removes one entry from the live list. Submitting the next batch before the
+ * current one has finished would build it from a list that is still being
+ * rewritten — and the same photo would be sent twice.
+ *
+ * The loop reads getRemaining() afresh each turn rather than counting down from
+ * a total, because the list is the authority: an item that failed to load stays
+ * in it, and the loop must come back to it rather than skip it.
+ */
+async function queueConsuming(getRemaining, chunkSize, onProgress) {
+    let sent = 0, guard = 0;
+    while (getRemaining() > 0 && guard < 10000) {
+        const batch = Math.min(chunkSize, getRemaining());
+        const before = getRemaining();
+        await app.queuePrompt(0, batch);
+        sent += batch;
+        onProgress?.(sent, before);
+        await waitUntil(async () => (await pendingCount()) === 0);
+        if (getRemaining() >= before) {
+            // Rien n'a ete consomme : consume_on_load est off, ou le
+            // chargement a echoue. Continuer bouclerait sur le meme item.
+            console.warn("[Aiorbust Batch] nothing was consumed — stopping to avoid a loop. "
+                       + "Is consume_on_load enabled on the node?");
+            break;
+        }
+        guard++;
+    }
+    return sent;
+}
 
 // ── Theme colours (matching Aiorbust fire theme) ────────────────────────────
 const T = {
@@ -121,7 +201,7 @@ function setupBatchLoader(node) {
     const fileInput = document.createElement("input");
     fileInput.type     = "file";
     fileInput.multiple = true;
-    fileInput.accept   = "image/*";
+    fileInput.accept   = "image/*,video/*";
     css(fileInput, { display: "none" });
     root.appendChild(fileInput);
 
@@ -205,7 +285,13 @@ function setupBatchLoader(node) {
             e.preventDefault(); e.stopPropagation();
             css(root, { outline: "none" });
             css(dropZone, { borderColor: T.border, background: "transparent" });
-            const files = [...e.dataTransfer.files].filter(f => f.type.startsWith("image/"));
+            // Certains navigateurs laissent f.type vide sur un glisser-deposer
+            // depuis l'explorateur Windows ; l'extension sert alors de repli,
+            // sinon le fichier est rejete sans aucun message.
+            const VIDEO_RE = /\.(mp4|mov|webm|mkv|avi|m4v|mpe?g|wmv|flv)$/i;
+            const files = [...e.dataTransfer.files].filter(
+                f => f.type.startsWith("image/") || f.type.startsWith("video/") || VIDEO_RE.test(f.name)
+            );
             if (files.length) handleFiles(files);
         });
     }
@@ -232,13 +318,46 @@ function setupBatchLoader(node) {
         syncBatchData();
     });
 
+    const widgetValue = (name, fallback) => {
+        const w = node.widgets?.find(x => x.name === name);
+        return w === undefined ? fallback : w.value;
+    };
+
     queueBtn.addEventListener("click", async () => {
         const n = imageData.order.length;
         if (!n) return;
+        if (queueBtn.dataset.busy === "1") return;   // double-clic = double lot
+
+        const consume = !!widgetValue("consume_on_load", false);
+        const chunk   = Math.max(1, Math.min(QUEUE_CHUNK,
+                                             parseInt(widgetValue("queue_batch_size", QUEUE_CHUNK), 10)
+                                             || QUEUE_CHUNK));
+
+        queueBtn.dataset.busy = "1";
+        const label = queueBtn.innerHTML;
+        const progress = (sent, total) => {
+            queueBtn.innerHTML = sent >= total ? `⏳ ${sent} / ${total}`
+                                               : `⏳ ${sent} / ${total} — waiting`;
+        };
         try {
-            await app.queuePrompt(0, n);
+            if (consume) {
+                queueBtn.innerHTML = `⏳ 0 / ${n}`;
+                const sent = await queueConsuming(() => imageData.order.length, chunk, progress);
+                console.log(`[Aiorbust Batch] consume mode: queued ${sent} run(s) `
+                          + `${chunk} at a time, ${imageData.order.length} left in the list.`);
+            } else if (n <= chunk) {
+                await app.queuePrompt(0, n);
+            } else {
+                queueBtn.innerHTML = `⏳ 0 / ${n}`;
+                await queueInChunks(n, chunk, progress);
+                console.log(`[Aiorbust Batch] queued ${n} run(s) in chunks of ${chunk}`);
+            }
         } catch(e) {
             console.error("[Aiorbust Batch] queuePrompt error:", e);
+        } finally {
+            queueBtn.dataset.busy = "0";
+            queueBtn.innerHTML = label;
+            refresh();
         }
     });
 
@@ -457,6 +576,23 @@ function setupBatchLoader(node) {
         if (active) active.scrollIntoView({ block: "nearest", behavior: "smooth" });
     };
     api.addEventListener("aiorbust_batch_loader_update", wsHandler);
+
+    // ── WebSocket: an item was loaded and must leave the list ──────────────
+    // Only the list is touched. The file stays in the pool folder, so nothing
+    // is destroyed by a mode whose entire purpose is to survive a crash.
+    const consumeHandler = ({ detail }) => {
+        if (String(detail?.node_id) !== String(node.id)) return;
+        const id = String(detail.image_id || "");
+        if (!id) return;
+        const before = imageData.order.length;
+        imageData.order  = imageData.order.filter(x => x !== id);
+        imageData.images = imageData.images.filter(i => String(i.id) !== id);
+        if (imageData.order.length === before) return;   // deja retire
+        currentIndex = -1;
+        refresh();
+        syncBatchData();
+    };
+    api.addEventListener("aiorbust_batch_loader_consume", consumeHandler);
 
     // ── DOM widget (display only — does not serialize) ─────────────────────
     node.addDOMWidget("images_display", "AIORBUST_BATCH_DISPLAY", root, {

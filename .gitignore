@@ -3,3 +3,8 @@ __pycache__/
 *.egg-info/
 .DS_Store
 Thumbs.db
+nodes/grok_prompt_presets.json
+nodes/nb_aio_presets.json
+.aiorbust-sync.json
+_cache/
+_prompt_library/

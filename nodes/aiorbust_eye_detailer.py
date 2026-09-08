@@ -885,12 +885,5 @@ class AiorbustDetailer:
         return result_img, result_cropped_enhanced, result_cropped_enhanced_alpha, result_mask, pipe, result_cnet_images
 
 
-NODE_CLASS_MAPPINGS = {
-    "AiorbustEyeBBoxDetectorProvider": AiorbustEyeBBoxDetectorProvider,
-    "AiorbustDetailer": AiorbustDetailer,
-}
-
-NODE_DISPLAY_NAME_MAPPINGS = {
-    "AiorbustEyeBBoxDetectorProvider": "Aiorbust HD Ultralytic BBox Loader",
-    "AiorbustDetailer": "Aiorbust Detailer",
-}
+# NOTE: l'enregistrement (NODE_CLASS_MAPPINGS / NODE_DISPLAY_NAME_MAPPINGS) se
+# fait dans __init__.py du pack, pas ici.

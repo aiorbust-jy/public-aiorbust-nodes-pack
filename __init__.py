@@ -108,8 +108,29 @@ from .nodes.aiorbust_license import (
     NODE_CLASS_MAPPINGS as _lic_cls,
     NODE_DISPLAY_NAME_MAPPINGS as _lic_disp,
 )
+from .nodes.aiorbust_segment_cache import (
+    NODE_CLASS_MAPPINGS as _segcache_cls,
+    NODE_DISPLAY_NAME_MAPPINGS as _segcache_disp,
+)
+from .nodes.aiorbust_rife_batched import (
+    NODE_CLASS_MAPPINGS as _rife_cls,
+    NODE_DISPLAY_NAME_MAPPINGS as _rife_disp,
+)
+from .nodes.aiorbust_save_video_no_metadata import (
+    NODE_CLASS_MAPPINGS as _savevid_cls,
+    NODE_DISPLAY_NAME_MAPPINGS as _savevid_disp,
+)
 from .nodes.metadata_bypass import MetadataBypassNode
 from .nodes.image_black_check import ImageBlackCheckNode
+from .nodes.aiorbust_image_blur_batched import (
+    AiorbustImageBlurBatched, AiorbustImageCompositeMaskedBatched,
+)
+from .nodes.aiorbust_images_to_video import AiorbustImagesToVideo
+from .nodes.aiorbust_prompt_library import AiorbustPromptSaver, AiorbustPromptGallery
+from .nodes.aiorbust_video_chain import (
+    AiorbustVideoChainSegment, AiorbustVideoChainJoin,
+    AiorbustVideoChainPrepare, AiorbustVideoChainCommit,
+)
 
 NODE_CLASS_MAPPINGS = {}
 NODE_DISPLAY_NAME_MAPPINGS = {}
@@ -133,6 +154,9 @@ for _cls, _disp in (
     (_apikeys_cls, _apikeys_disp),
     (_vfx_cls, _vfx_disp),
     (_lic_cls, _lic_disp),
+    (_segcache_cls, _segcache_disp),
+    (_rife_cls, _rife_disp),
+    (_savevid_cls, _savevid_disp),
 ):
     NODE_CLASS_MAPPINGS.update(_cls)
     NODE_DISPLAY_NAME_MAPPINGS.update(_disp)
@@ -144,16 +168,40 @@ NODE_DISPLAY_NAME_MAPPINGS["MetadataBypassNode"] = "Aiorbust Metadata Bypass"
 NODE_CLASS_MAPPINGS["ImageBlackCheckNode"] = ImageBlackCheckNode
 NODE_DISPLAY_NAME_MAPPINGS["ImageBlackCheckNode"] = "Aiorbust Image Black Check"
 
+# The V14 video-chain, prompt-library and batched-image nodes expose only
+# their classes, like the two above.
+NODE_CLASS_MAPPINGS["AiorbustImageBlurBatched"] = AiorbustImageBlurBatched
+NODE_DISPLAY_NAME_MAPPINGS["AiorbustImageBlurBatched"] = "Aiorbust Image Blur (batched)"
+NODE_CLASS_MAPPINGS["AiorbustImageCompositeMaskedBatched"] = AiorbustImageCompositeMaskedBatched
+NODE_DISPLAY_NAME_MAPPINGS["AiorbustImageCompositeMaskedBatched"] = "Aiorbust Image Composite Masked (batched)"
+NODE_CLASS_MAPPINGS["AiorbustImagesToVideo"] = AiorbustImagesToVideo
+NODE_DISPLAY_NAME_MAPPINGS["AiorbustImagesToVideo"] = "Aiorbust Images to Video (AB_VIDEO)"
+NODE_CLASS_MAPPINGS["AiorbustPromptSaver"] = AiorbustPromptSaver
+NODE_DISPLAY_NAME_MAPPINGS["AiorbustPromptSaver"] = "Aiorbust Prompt Saver"
+NODE_CLASS_MAPPINGS["AiorbustPromptGallery"] = AiorbustPromptGallery
+NODE_DISPLAY_NAME_MAPPINGS["AiorbustPromptGallery"] = "Aiorbust Prompt Gallery"
+NODE_CLASS_MAPPINGS["AiorbustVideoChainSegment"] = AiorbustVideoChainSegment
+NODE_DISPLAY_NAME_MAPPINGS["AiorbustVideoChainSegment"] = "Aiorbust Video Chain — Segment"
+NODE_CLASS_MAPPINGS["AiorbustVideoChainJoin"] = AiorbustVideoChainJoin
+NODE_DISPLAY_NAME_MAPPINGS["AiorbustVideoChainJoin"] = "Aiorbust Video Chain — Join"
+NODE_CLASS_MAPPINGS["AiorbustVideoChainPrepare"] = AiorbustVideoChainPrepare
+NODE_DISPLAY_NAME_MAPPINGS["AiorbustVideoChainPrepare"] = "Aiorbust Video Chain — Prepare"
+NODE_CLASS_MAPPINGS["AiorbustVideoChainCommit"] = AiorbustVideoChainCommit
+NODE_DISPLAY_NAME_MAPPINGS["AiorbustVideoChainCommit"] = "Aiorbust Video Chain — Commit"
+
 # The two Detailer nodes depend on Impact Pack / Impact Subpack. Load them
 # defensively so a missing dependency never takes the whole pack down — the
 # other nodes stay available and only the Detailer nodes are skipped.
 try:
+    # The module registers nothing itself -- it says so at the bottom of the
+    # file -- so the two classes are named and mapped here.
     from .nodes.aiorbust_eye_detailer import (
-        NODE_CLASS_MAPPINGS as _detailer_cls,
-        NODE_DISPLAY_NAME_MAPPINGS as _detailer_disp,
+        AiorbustEyeBBoxDetectorProvider, AiorbustDetailer,
     )
-    NODE_CLASS_MAPPINGS.update(_detailer_cls)
-    NODE_DISPLAY_NAME_MAPPINGS.update(_detailer_disp)
+    NODE_CLASS_MAPPINGS["AiorbustEyeBBoxDetectorProvider"] = AiorbustEyeBBoxDetectorProvider
+    NODE_CLASS_MAPPINGS["AiorbustDetailer"] = AiorbustDetailer
+    NODE_DISPLAY_NAME_MAPPINGS["AiorbustEyeBBoxDetectorProvider"] = "Aiorbust HD Ultralytic BBox Loader"
+    NODE_DISPLAY_NAME_MAPPINGS["AiorbustDetailer"] = "Aiorbust Detailer"
 except Exception as _e:
     print(f"[public-aiorbust-pack] Detailer nodes not loaded "
           f"(needs ComfyUI-Impact-Pack + Impact-Subpack): {_e}")
