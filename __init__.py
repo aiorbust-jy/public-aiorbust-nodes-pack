@@ -122,6 +122,7 @@ from .nodes.aiorbust_save_video_no_metadata import (
 )
 from .nodes.metadata_bypass import MetadataBypassNode
 from .nodes.image_black_check import ImageBlackCheckNode
+from .nodes.imageUtils import PreviewImageWithoutMetadata
 from .nodes.aiorbust_image_blur_batched import (
     AiorbustImageBlurBatched, AiorbustImageCompositeMaskedBatched,
 )
@@ -167,6 +168,11 @@ NODE_DISPLAY_NAME_MAPPINGS["MetadataBypassNode"] = "Aiorbust Metadata Bypass"
 
 NODE_CLASS_MAPPINGS["ImageBlackCheckNode"] = ImageBlackCheckNode
 NODE_DISPLAY_NAME_MAPPINGS["ImageBlackCheckNode"] = "Aiorbust Image Black Check"
+
+# imageUtils also defines SaveImageWithoutMetadata, but that is a base class the
+# private pack does not register either -- only the Preview subclass is a node.
+NODE_CLASS_MAPPINGS["PreviewImageWithoutMetadata"] = PreviewImageWithoutMetadata
+NODE_DISPLAY_NAME_MAPPINGS["PreviewImageWithoutMetadata"] = "Aiorbust Preview No Metadata"
 
 # The V14 video-chain, prompt-library and batched-image nodes expose only
 # their classes, like the two above.
