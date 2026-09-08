@@ -36,7 +36,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from google import genai
 from google.genai import types
 from ..utils.image_utils import tensor_to_pil
-from .aiorbust_license import check
 from aiohttp import web
 from server import PromptServer
 try:
@@ -1292,30 +1291,7 @@ class NanoBananaAIO:
                                "The whole call is replayed, so a partly-black batch re-generates "
                                "its good images too. Each attempt is billed.",
                 }),
-                # LAST, and it must stay last. ComfyUI stores widget values by
-                # position, so anything inserted above this line shifts every
-                # saved workflow's later values onto the wrong inputs. New
-                # widgets go after it, never beside where they belong visually.
-                "license_key": ("STRING", {
-                    "default": "", "multiline": False,
-                    "tooltip": "Checked LAST, after AIORBUST_LICENSE_KEY and the "
-                               "key files. Prefer either of those: a key typed "
-                               "here is saved into the workflow JSON and travels "
-                               "with every copy of the graph you share.\n\n"
-                               "Leave it empty and an Aiorbust License node "
-                               "anywhere in the graph supplies the key, wired "
-                               "in here or not.",
-                }),
             },
-            # The whole queued graph, injected by ComfyUI. Read only to find
-            # an Aiorbust License node's key, which is what lets that node sit
-            # unconnected: unconnected means never executed, so nothing it
-            # could hand over at run time would ever arrive.
-            #
-            # Named aiorbust_graph, not prompt: hidden inputs land in the same
-            # kwargs as the widgets, and this node already has a prompt widget
-            # that would be overwritten with the graph dict.
-            "hidden": {"aiorbust_graph": "PROMPT"},
         }
 
     RETURN_TYPES  = ("IMAGE", "STRING", "STRING")
@@ -1363,12 +1339,6 @@ class NanoBananaAIO:
         would mean touching every provider's parallel path; replaying costs a few
         extra images on a partly-black batch, which is the cheaper trade.
         """
-        # Gate first, before a retry loop that can bill a provider several
-        # times. Cached after the first call, so a graph with several licensed
-        # nodes still makes one round trip per queue.
-        check("nano_banana_aio", kwargs.pop("license_key", ""), label="NB AIO",
-              prompt=kwargs.pop("aiorbust_graph", None))
-
         attempts = max(0, int(kwargs.pop("max_black_retries", 0) or 0)) + 1
 
         for attempt in range(1, attempts + 1):
