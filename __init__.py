@@ -11,6 +11,7 @@ by the public Aiorbust workflows:
     - Aiorbust Film Grain                (aiorbustfilmgrain)
     - Aiorbust Camera Look               (Aiorbust_Camera_Look)
     - Aiorbust Grok Prompt Generator     (GrokPromptNode)
+    - Aiorbust Prompt Writer             (AiorbustPromptWriter)
     - Aiorbust Prompt Generator          (GeminiPromptNode)
     - Aiorbust Save Image (No Metadata)  (SaveImageWithNoMetadata)
     - Aiorbust Save Image No Metadata    (SaveImageNoMetadataNode)
@@ -63,6 +64,10 @@ from .nodes.aiorbust_camera_look import (
 from .nodes.grok_prompt import (
     NODE_CLASS_MAPPINGS as _grok_cls,
     NODE_DISPLAY_NAME_MAPPINGS as _grok_disp,
+)
+from .nodes.aiorbust_prompt_writer import (
+    NODE_CLASS_MAPPINGS as _writer_cls,
+    NODE_DISPLAY_NAME_MAPPINGS as _writer_disp,
 )
 from .nodes.gemini_prompt import (
     NODE_CLASS_MAPPINGS as _gemini_cls,
@@ -144,6 +149,7 @@ for _cls, _disp in (
     (_grain_cls, _grain_disp),
     (_camera_cls, _camera_disp),
     (_grok_cls, _grok_disp),
+    (_writer_cls, _writer_disp),
     (_gemini_cls, _gemini_disp),
     (_savenm_cls, _savenm_disp),
     (_savenometa_cls, _savenometa_disp),
