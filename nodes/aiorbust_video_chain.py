@@ -186,7 +186,36 @@ class AiorbustVideoChainSegment:
         # ── Guide ────────────────────────────────────────────────────────────
         is_first = previous_segment is None or int(previous_segment.shape[0]) == 0
         if is_first:
-            guide = initial_frames if initial_frames is not None else torch.zeros((1, 64, 64, 3))
+            if initial_frames is None or int(initial_frames.shape[0]) == 0:
+                # NE JAMAIS renvoyer une image de remplissage ici.
+                #
+                # Ce que cette sortie alimente, c'est MiniMaxH3AddGuide, et un
+                # guide n'est pas une suggestion : le latent est re-injecte a
+                # CHAQUE etape et n'est jamais debruite. Une frame noire de
+                # remplacement devient donc un carre noir que le modele est
+                # force de reproduire pendant les 50 etapes, et il passe le
+                # debut du rendu a s'en extraire - ce qui ruine l'ouverture,
+                # decale toute la suite, et donne l'impression que la video de
+                # reference n'est pas suivie.
+                #
+                # Cette version rendait torch.zeros((1, 64, 64, 3)) en silence,
+                # et le journal affichait "guide: 1 frame(s) [first segment]",
+                # ce qui avait l'air normal.
+                raise ValueError(
+                    "[Video Chain] segment 1 has nothing to pin: `initial_frames` is empty "
+                    "and there is no previous segment.\n"
+                    "\n"
+                    "`guide_frames` feeds MiniMaxH3AddGuide, whose latent is re-injected at "
+                    "every sampling step and never denoised. A placeholder here is not a "
+                    "harmless blank — it is a hard constraint the model must reproduce.\n"
+                    "\n"
+                    "-> Connect your corrected first frame to `initial_frames` (the same image "
+                    "you already feed to ref_image_0),\n"
+                    "-> or, if segment 1 should start free, bypass its MiniMaxH3AddGuide and "
+                    "wire the sampler's conditioning straight from MiniMaxH3ReferenceToVideo — "
+                    "which is what a single-segment workflow does."
+                )
+            guide = initial_frames
         else:
             have = int(previous_segment.shape[0])
             if have < ov:
@@ -588,7 +617,17 @@ class AiorbustVideoChainPrepare:
 
         # ── Guide ────────────────────────────────────────────────────────────
         if is_first:
-            guide = initial_frames if initial_frames is not None else torch.zeros((1, 64, 64, 3))
+            # Meme mine que dans Segment : un guide alimente AddGuide, dont le
+            # latent est re-injecte a chaque etape et jamais debruite. Une frame
+            # de remplissage y devient une contrainte dure.
+            if initial_frames is None or int(initial_frames.shape[0]) == 0:
+                raise ValueError(
+                    "[Video Chain] segment 1 has nothing to pin: `initial_frames` is empty.\n"
+                    "-> Connect your corrected first frame, or bypass MiniMaxH3AddGuide for "
+                    "this segment and feed the sampler straight from "
+                    "MiniMaxH3ReferenceToVideo."
+                )
+            guide = initial_frames
         else:
             if tail is None:
                 raise RuntimeError(
